@@ -43,7 +43,8 @@ const GAMES = [
   { name: "Smash Karts",                      icon: "img/smash-karts.png",         page: "game/smash-karts.html" },
   { name: "Five Nights At Freddys",           icon: "img/fnaf.png",                page: "game/fnaf.html" },
   { name: "Basketball Stars",                 icon: "img/basketball-stars.png",    page: "game/basketball-stars.html" },
-  { name: "Las basicas del momo",             icon: "img/momos-basics.png",        page: "game/momos-basics.html" }
+  { name: "Las basicas del momo",             icon: "img/momos-basics.png",        page: "game/momos-basics.html" },
+  { name: "We Become What We Behold",         icon: "img/we-become.png",           page: "game/we-become.html" }
   /* { name: "Otro", icon: "img/otro.png", page: "game/otro.html" }, */
 ];
 
