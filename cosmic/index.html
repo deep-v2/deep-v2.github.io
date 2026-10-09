@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cosmic</title>
+  <meta name="description" content="Cosmic — nicest unblocked website out there ;)">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="home">
+
+<canvas id="stars"></canvas>
+
+<nav class="nav">
+  <a class="brand" href="index.html">
+    <img src="img/logo.png" alt="Cosmic"
+         onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+    <span class="brand-name" style="display:none">Cosmic</span>
+  </a>
+
+  <div class="nav-search">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/></svg>
+    <input type="text" id="search" data-i18n-ph="searchPh" data-i18n-aria="searchAria"
+           placeholder="¿Qué vas a jugar hoy?" aria-label="buscar juego">
+  </div>
+
+  <button class="lang-btn" id="langBtn" type="button">EN</button>
+</nav>
+
+<header class="hero">
+  <h1>Cosmic</h1>
+  <p class="subtitle" id="sub"></p>
+
+  <div class="hero-actions">
+    <button class="cta" id="surprise" type="button" data-i18n="cta">Juega uno al azar</button>
+    <a class="cta cta-discord" data-discord href="#" target="_blank" rel="noopener">
+      <svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M19.27 5.33A16.4 16.4 0 0 0 15.1 4a.09.09 0 0 0-.07.03c-.18.33-.39.76-.53 1.09a15.2 15.2 0 0 0-4.59 0c-.14-.34-.36-.76-.54-1.09a.1.1 0 0 0-.07-.03c-1.47.25-2.89.66-4.17 1.33a.09.09 0 0 0-.04.03C2.33 9.05 1.63 12.66 1.98 16.23a.1.1 0 0 0 .04.07 16.5 16.5 0 0 0 4.99 2.52.09.09 0 0 0 .1-.03c.38-.52.72-1.07 1.01-1.65a.09.09 0 0 0-.05-.13 10.8 10.8 0 0 1-1.54-.74.09.09 0 0 1 0-.15l.31-.24a.09.09 0 0 1 .09 0 11.8 11.8 0 0 0 10.03 0 .09.09 0 0 1 .09 0l.31.24a.09.09 0 0 1 0 .15c-.49.29-1 .54-1.54.74a.09.09 0 0 0-.05.13c.3.58.63 1.13 1.01 1.65a.09.09 0 0 0 .1.03 16.4 16.4 0 0 0 5.03-2.52.09.09 0 0 0 .04-.07c.42-4.13-.7-7.71-2.96-10.87a.07.07 0 0 0-.04-.03ZM8.52 14.18c-.97 0-1.77-.9-1.77-2s.78-2 1.77-2c1 0 1.79.9 1.77 2 0 1.1-.78 2-1.77 2Zm6.97 0c-.97 0-1.77-.9-1.77-2s.78-2 1.77-2c1 0 1.79.9 1.77 2 0 1.1-.77 2-1.77 2Z"/></svg>
+      <span data-i18n="joinDc">Únete al Discord</span>
+    </a>
+  </div>
+</header>
+
+<main>
+  <div class="section-head">
+    <h2 data-i18n="allGames">Todos los juegos</h2>
+    <span class="count" id="count"></span>
+  </div>
+
+  <div class="grid" id="grid"></div>
+  <p class="no-results" id="nores" data-i18n="noResults">no hay resultados :(</p>
+</main>
+
+<footer class="footer">
+  <div class="footer-inner">
+    <div>
+      <div class="footer-brand">Cosmic</div>
+      <p class="tag">do you like this so far or</p>
+      <a class="footer-discord" data-discord href="#" target="_blank" rel="noopener" data-i18n="joinDc">Únete al Discord</a>
+    </div>
+
+    <div class="col">
+      <h4 data-i18n="colGames">Juegos</h4>
+      <a href="game/gd.html">Geometry Dash</a>
+      <a href="game/fnf.html">Friday Night Funkin</a>
+      <a href="game/subway-surfers.html">Subway Surfers</a>
+      <a href="game/baldi.html">Baldi's Basics</a>
+      <a href="game/cookie-clicker.html">Cookie Clicker</a>
+    </div>
+
+    <div class="col">
+      <h4 data-i18n="colMore">Más</h4>
+      <a href="game/fnaf.html">Five Nights At Freddy's</a>
+      <a href="game/smash-karts.html">Smash Karts</a>
+      <a href="game/utyellow.html">UNDERTALE Yellow</a>
+      <a href="game/papas-pizzeria.html">Papa's Pizzeria</a>
+      <a href="game/eaglercraft.html">Eaglercraft</a>
+    </div>
+  </div>
+
+  <div class="footer-bottom" data-i18n="bottom">Cosmic — juegos unblocked</div>
+</footer>
+
+<script src="js/main.js"></script>
+<script src="js/games.js"></script>
+<script src="js/i18n.js"></script>
+</body>
+</html>
