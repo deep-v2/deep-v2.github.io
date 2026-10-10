@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GENIO! — Cosmic</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+
+<canvas id="stars"></canvas>
+
+<nav class="nav">
+  <a class="brand" href="../index.html">
+    <img src="../img/logo.png" alt="Cosmic"
+         onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+    <span class="brand-name" style="display:none">Cosmic</span>
+  </a>
+  <a class="nav-pill" href="../index.html" data-i18n="allGames">Todos los juegos</a>
+  <button class="lang-btn" id="langBtn" type="button">EN</button>
+</nav>
+
+<main>
+  <div class="game-section">
+    <div class="game-outer">
+      <div class="aspect">
+        <iframe id="gameFrame" src="../../genio/index.html" title="GENIO!" allow="autoplay; fullscreen" allowfullscreen loading="lazy"></iframe>
+      </div>
+
+      <div class="game-bar">
+        <img class="bar-icon" src="../img/genio.png" alt="" onerror="this.remove()">
+        <div class="bar-txt">
+          <h1>GENIO!</h1>
+          <p class="by" data-i18n="gameBy">juega gratis en Cosmic</p>
+        </div>
+        <button class="btn-fs" id="fsBtn" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+          fullscreen
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-head">
+    <h2 data-i18n="moreGames">Más juegos</h2>
+  </div>
+  <div class="more-row" id="moreRow"></div>
+</main>
+
+<footer class="footer">
+  <div class="footer-inner">
+    <div>
+      <div class="footer-brand">Cosmic</div>
+      <p class="tag" data-i18n="tagline">Juegos unblocked para jugar en el navegador. Sin cuentas, sin instalar nada — abrí y jugá.</p>
+      <a class="footer-discord" data-discord href="#" target="_blank" rel="noopener" data-i18n="joinDc">Únete al Discord</a>
+    </div>
+
+    <div class="col">
+      <h4 data-i18n="colGames">Juegos</h4>
+      <a href="../game/gd.html">Geometry Dash</a>
+      <a href="../game/fnf.html">Friday Night Funkin</a>
+      <a href="../game/subway-surfers.html">Subway Surfers</a>
+      <a href="../game/baldi.html">Baldi's Basics</a>
+      <a href="../game/cookie-clicker.html">Cookie Clicker</a>
+      <a href="../game/fnaf.html">Five Nights At Freddys</a>
+    </div>
+
+    <div class="col">
+      <h4 data-i18n="colMore">Más</h4>
+      <a href="../index.html" data-i18n="seeAll">Todos los juegos</a>
+      <a href="../index.html#grid" data-i18n="seeGrid">Rejilla completa</a>
+    </div>
+  </div>
+
+  <div class="footer-bottom" data-i18n="bottom">Cosmic — juegos unblocked</div>
+</footer>
+
+<script src="../js/main.js"></script>
+<script src="../js/games.js"></script>
+<script src="../js/i18n.js"></script>
+</body>
+</html>
