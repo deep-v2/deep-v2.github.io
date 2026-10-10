@@ -45,7 +45,12 @@ const GAMES = [
   { name: "Basketball Stars",                 icon: "img/basketball-stars.png",    page: "game/basketball-stars.html" },
   { name: "Las basicas del momo",             icon: "img/momos-basics.png",        page: "game/momos-basics.html" },
   { name: "We Become What We Behold",         icon: "img/we-become.png",           page: "game/we-become.html" },
-  { name: "GENIO!",                          icon: "img/genio.png",               page: "game/genio.html" }
+  { name: "GENIO!",                          icon: "img/genio.png",               page: "game/genio.html" },
+  { name: "Henry Stickmin: Breaking the Bank",        icon: "img/henry-bank.png",     page: "game/henry-breaking-the-bank.html" },
+  { name: "Henry Stickmin: Escaping the Prison",      icon: "img/henry-prison.png",   page: "game/henry-escaping-the-prison.html" },
+  { name: "Henry Stickmin: Stealing the Diamond",     icon: "img/henry-diamond.png",  page: "game/henry-stealing-the-diamond.html" },
+  { name: "Henry Stickmin: Infiltrating the Airship", icon: "img/henry-airship.png",  page: "game/henry-infiltrating-the-airship.html" },
+  { name: "Henry Stickmin: Fleeing the Complex",      icon: "img/henry-complex.png",  page: "game/henry-fleeing-the-complex.html" }
   /* { name: "Otro", icon: "img/otro.png", page: "game/otro.html" }, */
 ];
 
