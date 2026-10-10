@@ -60,8 +60,7 @@ const GAMES = [
   { name: "Brain Test 2: Tricky Stories",        icon: "img/brain-test-2.jpg",       page: "game/brain-test-2.html" },
   { name: "Brain Test 3: Tricky Quests",         icon: "img/brain-test-3.jpg",       page: "game/brain-test-3.html" },
   { name: "Brain Test 4: Tricky Friends",        icon: "img/brain-test-4.jpg",       page: "game/brain-test-4.html" },
-  { name: "Pico's School",                       icon: "img/picos-school.jpg",       page: "game/picos-school.html" },
-  { name: "Underwheels",                         icon: "img/underwheels.jpg",        page: "game/underwheels.html" }
+  { name: "Pico's School",                       icon: "img/picos-school.jpg",       page: "game/picos-school.html" }
   /* { name: "Otro", icon: "img/otro.png", page: "game/otro.html" }, */
 ];
 

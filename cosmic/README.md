@@ -14,11 +14,25 @@ cosmic/
 ├── js/games.js       → lista de juegos (name / icon / page) + subtítulos random
 ├── js/i18n.js        → idiomas (es/en) + link de Discord
 ├── js/main.js        → script compartido (estrellas + botón fullscreen)
-├── img/*.png         → iconos, 128×128 (se ven a 64px)
+├── img/*.png|*.jpg    → iconos cuadrados (se ven a ~64px)
 │   └── logo.png      → LOGO del sitio
 ├── game/*.html       → kbau.lol/cosmic/game/<juego>.html
 └── README.md
 ```
+
+Fuera de `cosmic/`, en la **raíz del repo**, hay una carpeta especial:
+
+```
+pico/                  → kbau.lol/pico/pico.html   Pico's School corriendo con Ruffle
+├── pico.html          → la página que carga el juego (910×579, mismos datos que el embed original)
+├── pico.swf           → el juego tal cual (2 MB)
+└── ruffle.js + *.wasm → Ruffle self-hosted (~29 MB: dos builds de WASM, el navegador elige)
+```
+
+`game/picos-school.html` la embebe con un iframe a `../../pico/pico.html`. Es el único
+juego que no se embebe desde otro sitio: corre con una copia de Ruffle propia, así que
+no depende de nadie. Si algún día querés achicar el repo, borrá
+`ruffle_web-wasm_mvp_bg.*.wasm` (13,5 MB) y solo fallarían navegadores muy viejos sin SIMD.
 
 ## Cosas que se cambian seguido
 

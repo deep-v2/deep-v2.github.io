@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pico's School (2006) — Ruffle</title>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: #000;
+    overflow: hidden;
+  }
+  #stage {
+    width: 910px;
+    height: 579px;
+    max-width: 100%;
+    max-height: 100%;
+    margin: auto;
+  }
+  /* el player ocupa todo el stage */
+  ruffle-player, #stage > * {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+</style>
+<script src="ruffle.js"></script>
+</head>
+<body>
+
+<div id="stage"></div>
+
+<script>
+  /* ── config de Ruffle (igual al embed original de Newgrounds) ── */
+  window.RufflePlayer = window.RufflePlayer || {};
+  window.RufflePlayer.config = {
+    letterbox: "on",
+    warnOnUnsupportedContent: false,
+    contextMenu: "off",
+    backgroundColor: "#000000",
+    scale: "showAll",
+    forceScale: true,
+    quality: "high"
+  };
+
+  /* ── mismos datos que el embed original ── */
+  const GAME = {
+    url: "pico.swf",
+    autoplay: "on",
+    unmuteOverlay: "hidden",
+    allowScriptAccess: true,
+    width: 910,
+    height: 579,
+    vars: {
+      "ngio_session_id": "19759137.01464823baaca62b7a82092ea96368a99af50d749e9d63",
+      "NewgroundsAPI_PublisherID": 1,
+      "NewgroundsAPI_SandboxID": "6acaab3285641",
+      "NewgroundsAPI_SessionID": "jCceNplDcY4UsgPZQ9b7e73547a391d4c299e2529da8fe39bbd19b47270cI1hO",
+      "NewgroundsAPI_UserName": "kbaudasher",
+      "NewgroundsAPI_UserID": 29410493,
+      "ng_username": "kbaudasher"
+    }
+  };
+
+  window.addEventListener("load", function () {
+    const ruffle = window.RufflePlayer.newest();
+    const player = ruffle.createPlayer();
+    document.getElementById("stage").appendChild(player);
+    player.load(GAME);
+  });
+</script>
+
+</body>
+</html>
