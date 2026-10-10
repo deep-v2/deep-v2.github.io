@@ -27,7 +27,9 @@ const I18N = {
     bottom:     'Cosmic — juegos unblocked',
     discord:    'Discord',
     toEn:       'Switch to English',
-    toEs:       'Cambiar a español'
+    toEs:       'Cambiar a español',
+    openTab:    'Abrir en una pestaña nueva',
+    cantEmbed:  'Este juego no se puede embeber en la página. Se abre solo en una pestaña nueva.'
   },
   en: {
     searchPh:   'What are you playing today?',
@@ -47,7 +49,9 @@ const I18N = {
     bottom:     'Cosmic — unblocked games',
     discord:    'Discord',
     toEn:       'Switch to English',
-    toEs:       'Cambiar a español'
+    toEs:       'Cambiar a español',
+    openTab:    'Open in a new tab',
+    cantEmbed:  "This game can't be embedded in the page. It only opens in a new tab."
   }
 };
 

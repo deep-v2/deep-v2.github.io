@@ -50,7 +50,18 @@ const GAMES = [
   { name: "Henry Stickmin: Escaping the Prison",      icon: "img/henry-prison.png",   page: "game/henry-escaping-the-prison.html" },
   { name: "Henry Stickmin: Stealing the Diamond",     icon: "img/henry-diamond.png",  page: "game/henry-stealing-the-diamond.html" },
   { name: "Henry Stickmin: Infiltrating the Airship", icon: "img/henry-airship.png",  page: "game/henry-infiltrating-the-airship.html" },
-  { name: "Henry Stickmin: Fleeing the Complex",      icon: "img/henry-complex.png",  page: "game/henry-fleeing-the-complex.html" }
+  { name: "Henry Stickmin: Fleeing the Complex",      icon: "img/henry-complex.png",  page: "game/henry-fleeing-the-complex.html" },
+  { name: "Chicken Strike",                      icon: "img/chicken-strike.jpg",     page: "game/chicken-strike.html" },
+  { name: "Crazy Cattle 3D",                     icon: "img/crazy-cattle-3d.jpg",    page: "game/crazy-cattle-3d.html" },
+  { name: "Crazy Mouse Battle",                  icon: "img/crazy-mouse-battle.jpg", page: "game/crazy-mouse-battle.html" },
+  { name: "Aquapark.io",                         icon: "img/aquapark.jpg",           page: "game/aquapark.html" },
+  { name: "Trivia Crack",                        icon: "img/trivia-crack.jpg",       page: "game/trivia-crack.html" },
+  { name: "Brain Test: Tricky Puzzles",          icon: "img/brain-test.jpg",         page: "game/brain-test.html" },
+  { name: "Brain Test 2: Tricky Stories",        icon: "img/brain-test-2.jpg",       page: "game/brain-test-2.html" },
+  { name: "Brain Test 3: Tricky Quests",         icon: "img/brain-test-3.jpg",       page: "game/brain-test-3.html" },
+  { name: "Brain Test 4: Tricky Friends",        icon: "img/brain-test-4.jpg",       page: "game/brain-test-4.html" },
+  { name: "Pico's School",                       icon: "img/picos-school.jpg",       page: "game/picos-school.html" },
+  { name: "Underwheels",                         icon: "img/underwheels.jpg",        page: "game/underwheels.html" }
   /* { name: "Otro", icon: "img/otro.png", page: "game/otro.html" }, */
 ];
 
