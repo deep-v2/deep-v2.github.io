@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="description" content="Fan-made 3D chat with Mickey Mouse (Clubhouse style). Not affiliated with Disney." />
+    <meta name="theme-color" content="#2f7fe0" />
+    <title>Mickey Clubhouse Chat (fan project)</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='58' r='28' fill='%23111'/%3E%3Ccircle cx='22' cy='28' r='17' fill='%23111'/%3E%3Ccircle cx='78' cy='28' r='17' fill='%23111'/%3E%3C/svg%3E" />
+    <script type="module" crossorigin src="/mickey/assets/index-CIOFrycT.js"></script>
+    <link rel="stylesheet" crossorigin href="/mickey/assets/index-IgBP_FLn.css">
+  </head>
+  <body>
+    <div id="app">
+      <main id="stage" aria-label="Mickey">
+        <canvas id="canvas"></canvas>
+        <div id="loading" role="status"><div class="ears"><i></i><i></i><i></i></div><span id="loading-text"></span></div>
+      </main>
+
+      <section id="panel" aria-label="Chat">
+        <header>
+          <h1 id="title"></h1>
+          <div class="tools">
+            <button id="btn-mute" type="button" class="icon" aria-pressed="false"></button>
+            <div class="lang" role="group" aria-label="Language">
+              <button type="button" data-lang="es">ES</button>
+              <button type="button" data-lang="en">EN</button>
+            </div>
+          </div>
+        </header>
+        <ol id="log" aria-live="polite"></ol>
+        <p id="status" role="status"></p>
+        <form id="form" autocomplete="off">
+          <input id="input" type="text" maxlength="500" enterkeyhint="send" />
+          <button id="send" type="submit"></button>
+        </form>
+        <footer id="credit"></footer>
+      </section>
+    </div>
+
+    <div id="start" role="dialog" aria-modal="true" aria-labelledby="start-title">
+      <div class="card">
+        <h2 id="start-title"></h2>
+        <p id="start-text"></p>
+        <div class="choose">
+          <button type="button" data-start="es" class="big">Hablar en español</button>
+          <button type="button" data-start="en" class="big alt">Chat in English</button>
+        </div>
+        <small id="start-note"></small>
+      </div>
+    </div>
+
+  </body>
+</html>
