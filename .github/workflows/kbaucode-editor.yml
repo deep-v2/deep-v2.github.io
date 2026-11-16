@@ -1,0 +1,96 @@
+# Builds the KbauBlocks editor (TurboWarp scratch-gui + kbaucode/editor-src patch set)
+# and commits the static build to kbaucode/editor/ so GitHub Pages serves it.
+name: KbauBlocks editor build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'kbaucode/editor-src/**'
+      - '.github/workflows/kbaucode-editor.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: kbaucode-editor
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out site
+        uses: actions/checkout@v4
+        with:
+          path: site
+
+      - name: Read pinned TurboWarp commit
+        id: pin
+        run: echo "sha=$(tr -d '[:space:]' < site/kbaucode/editor-src/TURBOWARP_COMMIT)" >> "$GITHUB_OUTPUT"
+
+      - name: Check out TurboWarp scratch-gui
+        uses: actions/checkout@v4
+        with:
+          repository: TurboWarp/scratch-gui
+          ref: ${{ steps.pin.outputs.sha }}
+          path: gui
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: gui/package-lock.json
+
+      - name: Install dependencies
+        working-directory: gui
+        run: npm ci
+
+      - name: Apply KbauBlocks patch set
+        run: node site/kbaucode/editor-src/apply-kbau.mjs gui
+
+      - name: Build editor
+        working-directory: gui
+        env:
+          NODE_ENV: production
+          NODE_OPTIONS: --max-old-space-size=6144
+        run: npx webpack --bail
+
+      - name: Copy build into site
+        run: |
+          rm -rf site/kbaucode/editor
+          mkdir -p site/kbaucode/editor
+          cp -r gui/build/. site/kbaucode/editor/
+          # GitHub Pages (Jekyll) ignores paths starting with "_"; fail if any exist.
+          if find site/kbaucode/editor -name '_*' | grep -q .; then
+            echo "::error::Build contains paths starting with '_' that Jekyll would hide"
+            find site/kbaucode/editor -name '_*'
+            exit 1
+          fi
+          cat > site/kbaucode/editor/BUILD_INFO.txt <<EOF
+          KbauBlocks editor build
+          TurboWarp scratch-gui commit: ${{ steps.pin.outputs.sha }}
+          Site commit: ${{ github.sha }}
+          Built: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+          Source: https://github.com/${{ github.repository }}/tree/main/kbaucode/editor-src
+          EOF
+          du -sh site/kbaucode/editor
+
+      - name: Commit build
+        working-directory: site
+        run: |
+          git config user.name "kbaublocks-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A kbaucode/editor
+          if git diff --cached --quiet; then
+            echo "No changes"
+            exit 0
+          fi
+          git commit -m "kbaucode: build editor from ${{ github.sha }} [skip ci]"
+          for i in 1 2 3; do
+            git pull --rebase origin main && git push origin HEAD:main && exit 0
+            sleep 5
+          done
+          exit 1
