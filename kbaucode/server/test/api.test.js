@@ -35,6 +35,11 @@ const freePort = () => new Promise(resolve => {
 });
 
 before(async () => {
+    // KBAU_TEST_BASE=http://127.0.0.1:8788/kbau-api runs the suite against an already running server (e.g. wrangler dev).
+    if (process.env.KBAU_TEST_BASE) {
+        base = process.env.KBAU_TEST_BASE;
+        return;
+    }
     dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'kbau-test-'));
     const port = await freePort();
     base = `http://127.0.0.1:${port}/kbau-api`;
@@ -54,6 +59,7 @@ before(async () => {
     throw new Error('server did not start');
 });
 after(async () => {
+    if (!proc) return;
     const exited = new Promise(resolve => proc.once('exit', resolve));
     proc.kill();
     await exited;
@@ -234,7 +240,7 @@ test('reports and moderation', async () => {
 });
 
 test('cloud variables over WebSocket', async () => {
-    const wsUrl = `${base.replace('http', 'ws')}/cloud`;
+    const wsUrl = `${base.replace('http', 'ws')}/cloud/${projectId}`;
     const open = () => new Promise((resolve, reject) => {
         const ws = new WebSocket(wsUrl);
         const messages = [];

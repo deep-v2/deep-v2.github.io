@@ -10,6 +10,14 @@
   },
   "scripts": {
     "start": "node src/server.js",
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "dev:worker": "wrangler dev --port 8788",
+    "migrate:local": "wrangler d1 migrations apply kbaublocks --local",
+    "migrate:remote": "wrangler d1 migrations apply kbaublocks --remote",
+    "deploy": "wrangler deploy",
+    "test:worker": "wrangler d1 migrations apply kbaublocks --local && echo Start: npx wrangler dev --port 8788 --var KBAU_ADMINS:alice, then KBAU_TEST_BASE=http://127.0.0.1:8788/kbau-api npm test"
+  },
+  "devDependencies": {
+    "wrangler": "^4.163.0"
   }
 }

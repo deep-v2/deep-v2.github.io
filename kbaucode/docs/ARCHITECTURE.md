@@ -9,9 +9,9 @@
                          └──────────────┬───────────────────────────────────────────────┬──────────────────────────┘
                                         │ HTTPS JSON + multipart (Bearer token)         │ WebSocket (cloud vars)
                                         ▼                                               ▼
-                         ┌──────────────────────────── KbauBlocks server (Node ≥ 22, zero deps) ───────────────────┐
-                         │  /kbau-api/*  REST API      /kbau-api/cloud  WebSocket      /*  optional static hosting   │
-                         │  SQLite (node:sqlite, WAL)  +  data/projects/<id>/<version>.sb3, thumbnails/, avatars/   │
+                         ┌──────────── shared core: server/src/core (api.js, auth.js, cloud.js) ────────────────────┐
+                         │  Production: Cloudflare Worker  — D1 (SQL) · R2 (files) · Durable Object per project room │
+                         │  Self-host:  Node server        — node:sqlite · data/blobs/ · in-process rooms + static   │
                          └──────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -27,7 +27,7 @@
 | `js/pages/*.js` | One module per page. |
 | `css/kbau.css` | Design system (tokens, components). |
 | `config.json` | `{"apiBase": ...}` — where the site/editor find the API. `null` = no server (static hosting). The Node server overrides this file when it serves the site. |
-| `server/` | Backend (see below) with `test/api.test.js`. |
+| `server/` | Backend: `src/core/` (platform-neutral API), `src/worker/` (Cloudflare), `src/server.js` + `src/node/` (Node), `migrations/` (shared SQL), `test/api.test.js` (runs against either). |
 | `docs/` | Research, architecture, roadmap. |
 
 ## Editor build pipeline
@@ -53,15 +53,15 @@ All extensions go through **one** mechanism: the Scratch extension API as implem
 
 ## Backend
 
-* **Runtime**: Node ≥ 22.13, no npm dependencies (`node:http`, `node:sqlite`, `node:crypto`, Web `Request.formData()` for multipart, hand-written RFC 6455 WebSocket).
-* **Auth**: scrypt password hashes; random 256-bit bearer tokens, only SHA-256 hashes stored; 30-day sliding sessions; password change revokes other sessions. First registered user (or `KBAU_ADMINS`) is admin.
-* **Data model** (`server/src/db.js`): users, sessions, projects (+ counters), project_versions, loves, favorites, views (dedup per viewer per day), comments (one level of replies), collections, collection_projects, reports, cloud_variables. Migrations via `PRAGMA user_version`.
-* **Storage**: every save is a new immutable version file `data/projects/<id>/<n>.sb3`; restore creates a new version. Thumbnails and avatars validated by magic bytes.
+* **Shared core**: `src/core/api.js` takes a standard `Request` and returns a `Response`, with injected `db` (async get/all/run) and `blobs` (put/get) adapters. The same routes run on Cloudflare Workers (D1 + R2) and Node (node:sqlite + files), and the same test suite verifies both.
+* **Auth**: PBKDF2-SHA256 password hashes (Web Crypto, 100k iterations); random 256-bit bearer tokens, only SHA-256 hashes stored; 30-day sliding sessions; password change revokes other sessions. First registered user (or `KBAU_ADMINS`) is admin.
+* **Data model** (`server/src/db.js`): users, sessions, projects (+ counters), project_versions, loves, favorites, views (dedup per viewer per day), comments (one level of replies), collections, collection_projects, reports, cloud_variables. Migrations: `migrations/*.sql`, tracked in `d1_migrations` on both backends.
+* **Storage**: every save is a new immutable version object `projects/<id>/<n>.sb3` (R2 or `data/blobs/`); restore creates a new version. Thumbnails and avatars validated by magic bytes.
 * **Visibility**: shared && !hidden && !deleted is public; owners and moderators see the rest.
 * **Discovery**: recent; popular (weighted all-time counters); trending (weighted activity in the last 7 days + new-share boost); search over titles, descriptions and usernames.
 * **Moderation**: reports on projects/comments/users; mods can hide content, ban (revokes sessions), dismiss; admins assign roles.
-* **Cloud variables**: `/kbau-api/cloud` speaks TurboWarp's protocol (`handshake`, `set`, `create`, `delete`, `rename`, newline-delimited JSON), rooms per project, values persisted, 40 vars/project, rate-limited.
-* **Rate limits**: in-memory token buckets per IP/user for register, login, create, save, comment, report.
+* **Cloud variables**: `/kbau-api/cloud/<projectId>` (one Durable Object per project on Cloudflare) speaks TurboWarp's protocol (`handshake`, `set`, `create`, `delete`, `rename`, newline-delimited JSON), rooms per project, values persisted, 40 vars/project, rate-limited.
+* **Rate limits**: fixed windows stored in the `rate_limits` table (works across Worker isolates) for register, login, create, save, comment, report.
 
 ### API summary (prefix `/kbau-api`)
 
@@ -75,7 +75,7 @@ All extensions go through **one** mechanism: the Scratch extension API as implem
 
 ## Deployment options
 
-1. **GitHub Pages only** (current kbau.lol): website + editor work; community features show "server not connected" until an API is configured.
+1. **Current production**: GitHub Pages (site + editor) + Cloudflare Worker API. See [HOSTING.md](HOSTING.md).
 2. **Self-hosted all-in-one**: `node kbaucode/server/src/server.js` serves the website, the editor and the API on one origin (shared auth works automatically).
 3. **Split**: Pages for static files, server elsewhere; set `config.json` → `{"apiBase": "https://api.example.com/kbau-api"}`. CORS is open (`*`) because auth uses bearer tokens, not cookies.
 

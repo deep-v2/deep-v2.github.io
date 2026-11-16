@@ -1,0 +1,31 @@
+{
+  // KbauBlocks API on Cloudflare Workers. Deploy: npm run deploy (see docs/HOSTING.md).
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "kbaublocks-api",
+  "main": "src/worker/index.js",
+  "compatibility_date": "2026-11-01",
+  "workers_dev": true,
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "kbaublocks",
+      "database_id": "9af6a097-a996-4e5f-8b0d-fdf601d73a25",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [
+    { "binding": "BUCKET", "bucket_name": "kbaublocks-files" }
+  ],
+  "durable_objects": {
+    "bindings": [{ "name": "CLOUD", "class_name": "CloudRoom" }]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["CloudRoom"] }
+  ],
+  "vars": {
+    "KBAU_API_PREFIX": "/kbau-api",
+    "KBAU_ADMINS": "",
+    "KBAU_FIRST_USER_ADMIN": "0"
+  },
+  "observability": { "enabled": true }
+}

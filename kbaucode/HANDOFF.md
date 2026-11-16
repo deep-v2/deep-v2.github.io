@@ -6,7 +6,7 @@ Last updated: 2026-11-16. Read this first when continuing development.
 
 * Live (static): `https://kbau.lol/kbaucode/` (repo `deep-v2/deep-v2.github.io`, folder `kbaucode/`, GitHub Pages with CNAME kbau.lol).
 * Editor: `kbaucode/editor/` is **generated** by `.github/workflows/kbaucode-editor.yml` from `kbaucode/editor-src/`. Edit the patch script/overlay, push, and the workflow rebuilds and commits the editor (~5 min).
-* Backend: `kbaucode/server/` — `npm start` (Node ≥ 22.13, no `npm install` needed), `npm test`.
+* Backend: **live on Cloudflare** at `https://kbaublocks-api.kbaudasher.workers.dev/kbau-api` (Worker + D1 + R2 + Durable Objects). Source `kbaucode/server/`; deploy/admin/backup steps in `docs/HOSTING.md`. Self-host with `npm start` (Node ≥ 22.13).
 * Docs: `docs/RESEARCH.md` (ecosystem + licensing), `docs/ARCHITECTURE.md` (design + API), `docs/ROADMAP.md` (phases).
 
 ## Done and verified
@@ -18,20 +18,21 @@ Last updated: 2026-11-16. Read this first when continuing development.
 | Save to KbauBlocks (create → version 2 on resave → remix as another user with attribution) | ✅ | Browser end-to-end against local server. |
 | `?kbau_project=<id>` loading (incl. unshared projects for owners) | ✅ | Embedded player on project page renders the project. |
 | Unified extension catalog (TurboWarp 105 + PenguinMod 73 + custom URL) | ✅ | Loaded both lists; Box2D opened in editor with its category. |
+| Backend on Cloudflare (D1, R2, Durable Objects) and Node from one shared core | ✅ | Same 11 tests pass against Node and a local Worker; production deploy answers health and login checks. |
 | Backend: accounts, profiles, avatars, projects, versions, share/unshare, loves, favorites, views, remixes, comments+replies, explore (trending/popular/recent), search, collections, reports, moderation, roles, cloud variables | ✅ | `server/test/api.test.js`: 11 end-to-end tests, all passing. |
 | Website pages: home, explore/search, project, profile, My Stuff, collection, sign in/join, settings (profile/account/appearance/server), moderation, extensions | ✅ | Each page loaded against the local server with no JS errors; core actions exercised. |
 | Static-hosting fallback (no server) | ✅ | Served with a plain static server: honest "server not connected" notice, editor still works. |
 
 ## Not done / not verified (next steps, in priority order)
 
-1. **Host the backend.** kbau.lol is GitHub Pages only, so community features are offline there. Deploy `kbaucode/server` (any VPS/container with a persistent disk; put it behind HTTPS) and set `kbaucode/config.json` → `{"apiBase": "https://<host>/kbau-api"}`. Until then users can point the site at any server via Settings → Server.
-2. **Cloud variables in the editor**: server side is tested; the editor passes `cloud_host` + `kbau_project` and the handshake uses the KbauBlocks id, but a real two-tab cloud project was **not** tested end-to-end in the browser yet. TurboWarp only connects cloud when the project is "showing with id"; verify, and patch `cloud-manager-hoc.jsx` if needed.
+1. **Make an admin account**: sign up on kbau.lol, then add that username to `KBAU_ADMINS` in `server/wrangler.jsonc` and `npm run deploy` (first-user-admin is off in production).
+2. **Cloud variables in the editor**: server side is tested on both backends; the site passes `cloud_host=.../cloud/<id>` + `kbau_project`, but a real two-tab cloud project was **not** tested end-to-end in the browser yet. TurboWarp only connects cloud when the project is "showing with id"; verify, and patch `cloud-manager-hoc.jsx` if needed.
 3. **Editor UX for saving**: uses `window.confirm/alert`. Replace with a proper modal (title/description/share toggle) inside the GUI.
 4. **PenguinMod blocks as a KbauBlocks extension** (see ROADMAP phase 3), plus a PenguinMod API compatibility shim for gallery extensions.
 5. In-editor extension catalog (reuse `SOURCES` from `js/pages/extensions.js`).
 6. Translations for KbauBlocks-specific strings (menu item and dialogs are English only).
 7. Email verification / password reset (needs an email provider), account deletion, notifications ("someone commented on your project").
-8. Backups for `server/data` (SQLite file + project files) and a Dockerfile.
+8. Dockerfile for Node self-hosting. (Cloudflare backups: D1 Time Travel, see HOSTING.md.)
 
 ## Gotchas
 

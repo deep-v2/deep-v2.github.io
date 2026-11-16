@@ -170,7 +170,7 @@ export const editorUrl = async (params = {}) => {
     const url = new URL('editor/editor.html', siteRoot);
     for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== null) url.searchParams.set(k, v);
     if (params.kbau_project) {
-        const ws = await cloudHost();
+        const ws = await cloudHost(params.kbau_project);
         if (ws) url.searchParams.set('cloud_host', ws);
     }
     return url.href;
@@ -178,14 +178,15 @@ export const editorUrl = async (params = {}) => {
 export const embedUrl = async id => {
     const url = new URL('editor/embed.html', siteRoot);
     url.searchParams.set('kbau_project', id);
-    const ws = await cloudHost();
+    const ws = await cloudHost(id);
     if (ws) url.searchParams.set('cloud_host', ws);
     return url.href;
 };
-export const cloudHost = async () => {
+/** Cloud variable server for one project (each project has its own room). */
+export const cloudHost = async projectId => {
     const base = await getApiBase();
     if (!base) return '';
-    const u = new URL(`${base}/cloud`);
+    const u = new URL(`${base}/cloud/${encodeURIComponent(projectId)}`);
     u.protocol = u.protocol === 'https:' ? 'wss:' : 'ws:';
     return u.href;
 };
