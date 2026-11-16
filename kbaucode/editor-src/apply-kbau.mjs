@@ -262,6 +262,15 @@ edit('src/lib/cloud-provider.js', [
 `]
 ]);
 
+// 4c. Tab title: "KbauBlocks - Editor" instead of TurboWarp's tagline (new id, so no stale translations).
+edit('src/playground/render-interface.jsx', [
+    [`        defaultMessage: 'Run Scratch projects faster',
+        description: 'Title of homepage',
+        id: 'tw.guiDefaultTitle'`, `        defaultMessage: 'Editor',
+        description: 'Title of the KbauBlocks editor page',
+        id: 'kbau.guiDefaultTitle'`]
+]);
+
 // 5. Credits: keep upstream credits, add KbauBlocks notice at the top.
 edit('src/playground/credits/credits.jsx', [
     ["<main className={styles.main}>", `<main className={styles.main}>
