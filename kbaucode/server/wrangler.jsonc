@@ -24,7 +24,7 @@
   ],
   "vars": {
     "KBAU_API_PREFIX": "/kbau-api",
-    "KBAU_ADMINS": "",
+    "KBAU_ADMINS": "kbau",
     "KBAU_FIRST_USER_ADMIN": "0"
   },
   "observability": { "enabled": true }
