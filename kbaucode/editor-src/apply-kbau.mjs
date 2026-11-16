@@ -201,6 +201,29 @@ import {KbauError, saveToKbau, siteUrl} from '../../lib/kbau-cloud.js';`],
                                             onClick={this.props.onStartSelectingFileUpload}
                                         >`]
 ]);
+// Feedback / error-report links go to KbauBlocks, not to TurboWarp's maintainer.
+const replaceAll = (rel, from, to) => {
+    const file = path.join(gui, rel);
+    const text = fs.readFileSync(file, 'utf8');
+    const count = text.split(from).length - 1;
+    if (count < 1) {
+        console.error(`[kbau] ${rel}: anchor missing: ${from}`);
+        failures++;
+        return;
+    }
+    fs.writeFileSync(file, text.split(from).join(to));
+    console.log(`[kbau] patched ${rel} (${count} occurrences)`);
+};
+for (const rel of [
+    'src/components/menu-bar/menu-bar.jsx',
+    'src/addons/settings/settings.jsx',
+    'src/components/tw-invalid-embed/invalid-embed.jsx',
+    'src/playground/render-interface.jsx'
+]) {
+    replaceAll(rel,
+        'https://scratch.mit.edu/users/GarboMuffin/#comments',
+        'https://github.com/deep-v2/deep-v2.github.io/issues');
+}
 fs.appendFileSync(path.join(gui, 'src/components/menu-bar/menu-bar.css'), `
 /* KbauBlocks */
 .kbau-home {
@@ -219,6 +242,25 @@ fs.appendFileSync(path.join(gui, 'src/components/menu-bar/menu-bar.css'), `
 }
 `);
 console.log('[kbau] patched src/components/menu-bar/menu-bar.css');
+
+// 4b. Load projects from the KbauBlocks server with ?kbau_project=<id>, and use that id for cloud variables.
+edit('src/lib/project-fetcher-hoc.jsx', [
+    ["import storage from './storage';", "import storage from './storage';\nimport {fetchKbauProject} from './kbau-cloud.js';"],
+    [`            if (projectUrl) {
+                if (`, `            const kbauProject = typeof URLSearchParams === 'undefined' ?
+                null :
+                new URLSearchParams(location.search).get('kbau_project');
+            if (kbauProject && !projectUrl) {
+                assetPromise = fetchKbauProject(kbauProject).then(buffer => ({data: buffer}));
+            } else if (projectUrl) {
+                if (`]
+]);
+edit('src/lib/cloud-provider.js', [
+    ['        msg.project_id = this.projectId;\n', `        // KbauBlocks: projects hosted on a KbauBlocks server use their server id for cloud rooms.
+        msg.project_id = (typeof URLSearchParams !== 'undefined' &&
+            new URLSearchParams(location.search).get('kbau_project')) || this.projectId;
+`]
+]);
 
 // 5. Credits: keep upstream credits, add KbauBlocks notice at the top.
 edit('src/playground/credits/credits.jsx', [

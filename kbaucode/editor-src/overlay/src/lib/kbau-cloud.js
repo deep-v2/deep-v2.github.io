@@ -132,3 +132,20 @@ export {
     saveToKbau,
     siteUrl
 };
+
+/**
+ * Download a project from the KbauBlocks server (used for ?kbau_project=<id>).
+ * Sends the session token so owners can open their unshared projects.
+ * @param {string} id project id
+ * @returns {Promise<ArrayBuffer>} sb3 data
+ */
+export const fetchKbauProject = async id => {
+    const api = await getApiBase();
+    if (!api) throw new Error('No KbauBlocks community server is configured.');
+    const token = getToken();
+    const res = await fetch(`${api}/projects/${encodeURIComponent(id)}/sb3`, {
+        headers: token ? {Authorization: `Bearer ${token}`} : {}
+    });
+    if (!res.ok) throw new Error(`KbauBlocks server returned status ${res.status}`);
+    return res.arrayBuffer();
+};
