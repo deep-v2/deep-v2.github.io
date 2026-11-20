@@ -103,7 +103,7 @@ main { flex: 1; width: 100%; max-width: 1200px; margin: 0 auto; padding: 24px 16
     padding: 0 12px;
     height: 36px;
 }
-.search:focus-within { border-color: var(--accent); }
+.search:focus-within { border-color: #3a3a3a; background: #181818; }
 .search input {
     flex: 1;
     min-width: 0;
@@ -162,6 +162,8 @@ input[type="text"], input[type="password"], input[type="email"], input[type="url
     font-size: 0.95rem;
 }
 input:focus, textarea:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: transparent; }
+/* The header search pill shows focus itself (slightly lighter); no outline box inside it. */
+.search input:focus { outline: none; }
 textarea { resize: vertical; min-height: 90px; }
 .field { margin-bottom: 16px; }
 .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
