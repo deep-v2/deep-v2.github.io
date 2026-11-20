@@ -234,16 +234,13 @@ import {KbauError, getKbauProjectInfo, getToken, saveToKbau, shareToKbau, siteUr
         '        isShowingProject: getIsShowingProject(loadingState),\n        kbauProjectChanged: state.scratchGui.projectChanged,\n'],
     ['    handleClickSave () {\n', `    async handleClickKbauShare () {
         if (this.state && this.state.kbauSharing) return;
-        // Open the tab now (inside the click) so pop-up blockers allow it; it's pointed at the page once saved.
-        const tab = window.open('', '_blank');
         this.setState({kbauSharing: true});
         try {
+            // Save + share, then go to the project page in this tab (the project is saved, nothing is lost).
             const result = await shareToKbau(this.props.vm, this.props.projectTitle);
             this.setState({kbauShared: true});
-            if (tab) tab.location.href = result.url;
-            else window.location.href = result.url;
+            window.location.href = result.url;
         } catch (e) {
-            if (tab) tab.close();
             if (e instanceof KbauError && e.message === 'NOT_SIGNED_IN') {
                 // eslint-disable-next-line no-alert
                 if (window.confirm('Sign in to KbauBlocks to share projects. Open the sign-in page in a new tab?')) {
