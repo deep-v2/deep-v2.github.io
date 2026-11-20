@@ -163,7 +163,7 @@ function claudeMcpCard () {
     };
     return h('section', {class: 'card claude-mcp', id: 'claude-mcp', style: 'margin-bottom:22px'},
         h('div', {class: 'row', style: 'align-items:flex-start;gap:18px'},
-            h('img', {src: link('kbaucode/editor-src/overlay/src/lib/libraries/extensions/kbau/claude-mcp-small.svg'), alt: '', width: 56, height: 56}),
+            h('img', {src: link('kbaucode/editor-src/overlay/src/lib/libraries/extensions/kbau/claude-mcp-small.png'), alt: '', width: 56, height: 56}),
             h('div', {style: 'flex:1;min-width:240px'},
                 h('h2', {style: 'margin:0 0 4px'}, 'Claude MCP'),
                 h('p', {class: 'muted', style: 'margin:0'},
