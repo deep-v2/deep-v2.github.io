@@ -1,5 +1,5 @@
 KbauBlocks editor build
 TurboWarp scratch-gui commit: 7738389afee319d2c6293550a2f7cb13004b928c
-Site commit: 8c237c1fb19f5d1adaf0a555c310b1c0950cf457
-Built: 2026-11-20T15:53:26Z
+Site commit: 01c89780d427ae8273ab53beceef2e6486b7e9bc
+Built: 2026-11-20T17:01:06Z
 Source: https://github.com/deep-v2/deep-v2.github.io/tree/main/kbaucode/editor-src
