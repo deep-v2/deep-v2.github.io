@@ -73,7 +73,7 @@ export const avatarEl = (user, size = '') => {
         return img;
     }
     const name = (user && (user.displayName || user.username)) || '?';
-    return h('span', {class: `avatar ${size}`, style: `background:${(user && user.profileColor) || '#1fd1a0'}`}, name[0].toUpperCase());
+    return h('span', {class: `avatar ${size}`, style: `background:${(user && user.profileColor) || '#ffffff'}`}, name[0].toUpperCase());
 };
 
 const PLACEHOLDER = new URL('logo.png', siteRoot).href;

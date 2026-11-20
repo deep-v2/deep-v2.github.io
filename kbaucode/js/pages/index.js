@@ -14,7 +14,7 @@ const blocksArt = `<svg class="blocks" viewBox="0 0 360 300" aria-hidden="true">
   </g></svg>`;
 
 const features = [
-    ['#1fd1a0', '⚡', 'Compiled for speed', 'Projects compile to JavaScript with the TurboWarp compiler, plus turbo mode, custom framerates and removable limits.'],
+    ['var(--accent)', '⚡', 'Compiled for speed', 'Projects compile to JavaScript with the TurboWarp compiler, plus turbo mode, custom framerates and removable limits.'],
     ['#ffb648', '🧩', 'Extensions, unified', 'Browse the TurboWarp and PenguinMod galleries in one place, or load any custom extension by URL.'],
     ['#6a8cff', '🛠', 'Editor superpowers', 'Built-in Scratch Addons: block search, debugger, themes, editor tweaks and dozens more, all toggleable.'],
     ['#c779ff', '🌍', 'Share with everyone', 'Publish straight from the editor, then get loves, favorites, comments and remixes with attribution.']

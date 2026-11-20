@@ -14,7 +14,7 @@ Last updated: 2026-11-16. Read this first when continuing development.
 | Area | Status | How it was verified |
 |---|---|---|
 | Editor based on TurboWarp (compiler, addons, custom extensions, sb3 load/save) | ✅ | Built by CI from pinned TurboWarp commit `7738389a`; opened and used in a browser. |
-| KbauBlocks identity: name, logo, dark grey default theme, solid black top bar, mint accent | ✅ | Checked visually in the built editor. |
+| KbauBlocks identity: name, logo, dark grey default theme, solid black top bar, white accent (Mint still selectable) | ✅ | White accent: patch applies; check the built editor after the CI build. |
 | Save to KbauBlocks (create → version 2 on resave → remix as another user with attribution) | ✅ | Browser end-to-end against local server. |
 | `?kbau_project=<id>` loading (incl. unshared projects for owners) | ✅ | Embedded player on project page renders the project. |
 | Unified extension catalog (TurboWarp 105 + PenguinMod 73 + custom URL) | ✅ | Loaded both lists; Box2D opened in editor with its category. |

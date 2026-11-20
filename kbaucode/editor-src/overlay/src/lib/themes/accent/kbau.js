@@ -1,20 +1,26 @@
-// KbauBlocks brand accent (mint). Part of the KbauBlocks patch set, GPL-3.0.
+// KbauBlocks default accent: white on near-black. Part of the KbauBlocks patch set, GPL-3.0.
+// Wherever TurboWarp fills something with the accent colour, kbau-on-accent / kbau-accent-icon-filter
+// switch its text and icons to black so they stay readable (see apply-kbau.mjs, "white accent").
 const guiColors = {
-    'motion-primary': '#1fd1a0',
-    'motion-primary-transparent': '#1fd1a0e6',
-    'motion-tertiary': '#15a37c',
+    'motion-primary': '#ffffff',
+    'motion-primary-transparent': '#ffffffe6',
+    'motion-tertiary': '#d4d4d4',
 
-    'looks-secondary': '#1fd1a0',
-    'looks-transparent': '#1fd1a059',
-    'looks-light-transparent': '#1fd1a026',
-    'looks-secondary-dark': 'hsla(163, 60%, 38%, 1)',
+    'looks-secondary': '#ffffff',
+    'looks-transparent': '#ffffff40',
+    'looks-light-transparent': '#ffffff1f',
+    'looks-secondary-dark': '#cfcfcf',
 
-    'extensions-primary': 'hsla(163, 74%, 47%, 1)',
-    'extensions-tertiary': 'hsla(163, 74%, 32%, 1)',
-    'extensions-transparent': 'hsla(163, 74%, 47%, 0.35)',
-    'extensions-light': 'hsla(163, 57%, 85%, 1)',
+    'extensions-primary': '#e0e0e0',
+    'extensions-tertiary': '#bdbdbd',
+    'extensions-transparent': '#ffffff59',
+    'extensions-light': '#f2f2f2',
 
-    'drop-highlight': '#7cf0cf',
+    'drop-highlight': '#ffffff',
+
+    'kbau-on-accent': '#000000',
+    'kbau-accent-icon-filter': 'brightness(0)',
+    'kbau-checkbox-fill': '#6b6b6b',
 
     // KbauBlocks: the top bar is always solid black, regardless of accent.
     'menu-bar-background': '#000000',
@@ -23,8 +29,8 @@ const guiColors = {
 };
 
 const blockColors = {
-    checkboxActiveBackground: '#1fd1a0',
-    checkboxActiveBorder: '#15a37c'
+    checkboxActiveBackground: '#6b6b6b',
+    checkboxActiveBorder: '#4d4d4d'
 };
 
 export {

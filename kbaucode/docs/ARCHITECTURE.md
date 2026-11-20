@@ -40,7 +40,7 @@ Why patches instead of a full fork: TurboWarp's GUI is ~3,000 files and 1.5 GB o
 
 ### Current patch set
 * Branding: app name **KbauBlocks**, logo + wordmark in the menu bar linking to the site, credits notice, feedback links → our issue tracker, tab title.
-* Theme: default **dark** GUI with near-black greys (`#0e0e0e`/`#161616`/`#262626`), **solid black top bar** (`#000`) in every theme/accent, new default **Mint** accent.
+* Theme: default **dark** GUI with near-black greys (`#0e0e0e`/`#161616`/`#262626`), **solid black top bar** (`#000`) in every theme/accent, default **White** accent (black text and icons on accent-filled buttons, via `--kbau-on-accent` / `--kbau-accent-icon-filter`), with **Mint** as an extra choice.
 * Community: **File → Save to KbauBlocks** (create or new version, thumbnail from the stage, remix attribution via `kbau_remix`), `?kbau_project=<id>` loading with the user's token, cloud handshake uses the KbauBlocks project id.
 
 ## Unified extension architecture

@@ -2,7 +2,7 @@
 
 A universal, open-source, Scratch-compatible creation platform:
 
-* **Editor** — TurboWarp's fast compiler and Scratch Addons built in, with a KbauBlocks identity (dark grey theme, solid black top bar, mint accent) and direct publishing to the KbauBlocks community. Opens and saves standard Scratch 3 `.sb3` files.
+* **Editor** — TurboWarp's fast compiler and Scratch Addons built in, with a KbauBlocks identity (dark grey theme, solid black top bar, white accent) and direct publishing to the KbauBlocks community. Opens and saves standard Scratch 3 `.sb3` files.
 * **Unified extension catalog** — the TurboWarp and PenguinMod galleries plus custom URLs in one place, all loading through the same extension system.
 * **Community website** — profiles, project pages with an embedded player, loves, favorites, views, comments, remixes with attribution, collections, search, trending/popular/recent, reporting and moderation.
 * **Backend** — one API core that runs on Cloudflare Workers (D1, R2, Durable Objects; used in production) or as a zero-dependency Node server for self-hosting.

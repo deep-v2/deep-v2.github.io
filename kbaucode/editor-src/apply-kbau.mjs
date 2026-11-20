@@ -125,7 +125,7 @@ edit('src/lib/themes/gui/dark.js', [
     ["'ui-modal-background': '#111111'", "'ui-modal-background': '#121212'"],
     ["'ui-modal-header-background': '#333333'", "'ui-modal-header-background': '#000000'"],
     ["'ui-white': '#111111'", "'ui-white': '#121212'"],
-    ["'menu-bar-background': '#333333',", "'menu-bar-background': '#000000',\n    'menu-bar-background-image': 'none',\n    'menu-bar-foreground': '#ffffff',"],
+    ["'menu-bar-background': '#333333',", "'menu-bar-background': '#000000',\n    'menu-bar-background-image': 'none',\n    'menu-bar-foreground': '#ffffff',\n    'kbau-on-accent': '#ffffff',\n    'kbau-accent-icon-filter': 'none',\n    'kbau-checkbox-fill': 'var(--looks-secondary)',"],
     ["'assets-background': '#111111'", "'assets-background': '#0e0e0e'"],
     ["'input-background': '#1e1e1e'", "'input-background': '#1a1a1a'"],
     ["'popover-background': '#1e1e1e'", "'popover-background': '#1a1a1a'"],
@@ -134,7 +134,7 @@ edit('src/lib/themes/gui/dark.js', [
     ["'fullscreen-background': '#111111'", "'fullscreen-background': '#0a0a0a'"],
     ["'fullscreen-accent': '#111111'", "'fullscreen-accent': '#0a0a0a'"],
     ["'page-background': '#111111'", "'page-background': '#0e0e0e'"],
-    ["'link-color': '#44aaff'", "'link-color': '#1fd1a0'"],
+    ["'link-color': '#44aaff'", "'link-color': '#ffffff'"],
     ["workspace: '#1e1e1e'", "workspace: '#161616'"],
     ["toolboxSelected: '#1e1e1e'", "toolboxSelected: '#202020'"],
     ["toolbox: '#111111'", "toolbox: '#0e0e0e'"],
@@ -144,15 +144,16 @@ edit('src/lib/themes/gui/dark.js', [
     ["gridColor: '#484848'", "gridColor: '#2c2c2c'"]
 ]);
 edit('src/lib/themes/gui/light.js', [
-    ["'menu-bar-background': 'var(--looks-secondary)'", "'menu-bar-background': '#000000'"]
+    ["'menu-bar-background': 'var(--looks-secondary)',",
+        "'menu-bar-background': '#000000',\n    'kbau-on-accent': '#ffffff',\n    'kbau-accent-icon-filter': 'none',\n    'kbau-checkbox-fill': 'var(--looks-secondary)',"]
 ]);
 edit('src/lib/themes/index.js', [
-    ["import * as accentRainbow from './accent/rainbow';", "import * as accentRainbow from './accent/rainbow';\nimport * as accentKbau from './accent/kbau';"],
-    ["const ACCENT_RAINBOW = 'rainbow';", "const ACCENT_RAINBOW = 'rainbow';\nconst ACCENT_KBAU = 'kbau';"],
-    ['[ACCENT_RAINBOW]: accentRainbow\n', '[ACCENT_RAINBOW]: accentRainbow,\n    [ACCENT_KBAU]: accentKbau\n'],
+    ["import * as accentRainbow from './accent/rainbow';", "import * as accentRainbow from './accent/rainbow';\nimport * as accentKbau from './accent/kbau';\nimport * as accentKbauMint from './accent/kbau-mint';"],
+    ["const ACCENT_RAINBOW = 'rainbow';", "const ACCENT_RAINBOW = 'rainbow';\nconst ACCENT_KBAU = 'kbau';\nconst ACCENT_KBAU_MINT = 'kbau-mint';"],
+    ['[ACCENT_RAINBOW]: accentRainbow\n', '[ACCENT_RAINBOW]: accentRainbow,\n    [ACCENT_KBAU]: accentKbau,\n    [ACCENT_KBAU_MINT]: accentKbauMint\n'],
     ['const ACCENT_DEFAULT = ACCENT_RED;', 'const ACCENT_DEFAULT = ACCENT_KBAU;'],
     ['const GUI_DEFAULT = GUI_LIGHT;', 'const GUI_DEFAULT = GUI_DARK;'],
-    ['    ACCENT_RAINBOW,\n    ACCENT_MAP,', '    ACCENT_RAINBOW,\n    ACCENT_KBAU,\n    ACCENT_MAP,']
+    ['    ACCENT_RAINBOW,\n    ACCENT_MAP,', '    ACCENT_RAINBOW,\n    ACCENT_KBAU,\n    ACCENT_KBAU_MINT,\n    ACCENT_MAP,']
 ]);
 edit('src/lib/themes/themePersistance.js', [
     // KbauBlocks defaults to dark unless the user explicitly picks light (or needs high contrast).
@@ -164,11 +165,16 @@ edit('src/lib/themes/themePersistance.js', [
 ]);
 edit('src/components/menu-bar/tw-theme-accent.jsx', [
     ['import {ACCENT_BLUE, ACCENT_MAP, ACCENT_PURPLE, ACCENT_RED, ACCENT_RAINBOW, Theme}',
-        'import {ACCENT_BLUE, ACCENT_KBAU, ACCENT_MAP, ACCENT_PURPLE, ACCENT_RED, ACCENT_RAINBOW, Theme}'],
+        'import {ACCENT_BLUE, ACCENT_KBAU, ACCENT_KBAU_MINT, ACCENT_MAP, ACCENT_PURPLE, ACCENT_RED, ACCENT_RAINBOW, Theme}'],
     ['const options = defineMessages({\n', `const options = defineMessages({
     [ACCENT_KBAU]: {
+        defaultMessage: 'White',
+        description: 'Name of the KbauBlocks white color scheme, used by default.',
+        id: 'kbau.accent.white'
+    },
+    [ACCENT_KBAU_MINT]: {
         defaultMessage: 'Mint',
-        description: 'Name of the KbauBlocks mint color scheme, used by default.',
+        description: 'Name of the KbauBlocks mint color scheme.',
         id: 'kbau.accent.mint'
     },
 `]
@@ -282,6 +288,68 @@ fs.appendFileSync(path.join(gui, 'src/components/menu-bar/menu-bar.css'), `
 }
 `);
 console.log('[kbau] patched src/components/menu-bar/menu-bar.css');
+
+// 4a. White accent: where TurboWarp fills an element with the accent colour and puts white text/icons on it,
+// switch that text to --kbau-on-accent and those icons through --kbau-accent-icon-filter (black on white accent,
+// unchanged on every other accent).
+{
+    const onAccent = {
+        'src/addons/settings/settings.css': ['.select-option.selected'],
+        'src/components/action-menu/action-menu.css': ['.button', '.more-button', '.tooltip'],
+        'src/components/backpack/backpack.css': ['.more'],
+        'src/components/cards/card.css': ['.left-button, .right-button', '.header-buttons', '.see-all-button'],
+        'src/components/close-button/close-button.css': ['.small'],
+        'src/components/connection-modal/connection-modal.css': ['.peripheral-tile button', '.connection-button'],
+        'src/components/context-menu/context-menu.css': ['.menu-item:not(.menu-item-danger):hover'],
+        'src/components/custom-procedures/custom-procedures.css': ['.button-row button.ok-button'],
+        'src/components/delete-button/delete-button.css': ['.delete-button-visible'],
+        'src/components/gui/gui.css': ['.extension-button-container'],
+        'src/components/menu-bar/tw-news.css': ['.news'],
+        'src/components/prompt/prompt.css': ['.button-row button.ok-button'],
+        'src/components/question/question.css': ['.question-submit-button'],
+        'src/components/record-modal/record-modal.css': ['.button-row button.ok-button'],
+        'src/components/slider-prompt/slider-prompt.css': ['.button-row button.ok-button'],
+        'src/components/sound-editor/sound-editor.css': ['.round-button'],
+        'src/components/sprite-selector-item/sprite-selector-item.css': ['.is-selected .sprite-info'],
+        'src/components/stage-selector/stage-selector.css': ['.stage-selector.is-selected .header'],
+        'src/components/tag-button/tag-button.css': ['.tag-button:not(.active)'],
+        'src/components/telemetry-modal/telemetry-modal.css': ['.button-row button'],
+        'src/components/tw-cloud-variable-badge/cloud-variable-badge.css': ['.server.selected'],
+        'src/components/tw-custom-extension-modal/custom-extension-modal.css': ['.load-button'],
+        'src/components/tw-fonts-modal/fonts-modal.css': [
+            '.font-dropdown-item:hover', '.button', '.fallback-container .fallback-button-selected'
+        ],
+        'src/components/tw-invalid-project-modal/invalid-project-modal.css': ['.button'],
+        'src/components/tw-project-input/project-input.css': ['.tooltip'],
+        'src/components/tw-settings-modal/settings-modal.css': ['.button'],
+        'src/components/tw-unknown-platform-modal/unknown-platform-modal.css': ['.button'],
+        'src/components/tw-username-modal/username-modal.css': ['.button-row button.ok-button'],
+        'src/components/webgl-modal/webgl-modal.css': ['.button-row button'],
+        'src/playground/credits/credits.css': ['.header-container']
+    };
+    for (const [rel, selectors] of Object.entries(onAccent)) {
+        const file = path.join(gui, rel);
+        if (!fs.existsSync(file)) {
+            console.error(`[kbau] white accent: missing ${rel}`);
+            failures++;
+            continue;
+        }
+        const css = selectors.map(sel => {
+            const parts = sel.split(',').map(s => s.trim());
+            return `${parts.join(', ')} {\n    color: var(--kbau-on-accent, #ffffff) !important;\n}\n` +
+                `${parts.map(p => `${p} img, ${p} svg`).join(', ')} {\n    filter: var(--kbau-accent-icon-filter, none);\n}\n`;
+        }).join('');
+        fs.appendFileSync(file, `\n/* KbauBlocks: readable text/icons on the accent colour */\n${css}`);
+    }
+    fs.appendFileSync(path.join(gui, 'src/components/tw-fancy-checkbox/checkbox.css'), `
+/* KbauBlocks: a checked box must stay visible on the white accent */
+.checkbox:checked {
+    background-color: var(--kbau-checkbox-fill, var(--looks-secondary));
+    border-color: var(--kbau-checkbox-fill, var(--looks-secondary));
+}
+`);
+    console.log(`[kbau] white accent overrides in ${Object.keys(onAccent).length + 1} stylesheets`);
+}
 
 // 4b. Load projects from the KbauBlocks server with ?kbau_project=<id>, and use that id for cloud variables.
 edit('src/lib/project-fetcher-hoc.jsx', [

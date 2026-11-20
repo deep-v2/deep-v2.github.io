@@ -9,9 +9,9 @@
     --text-muted: #9a9a9a;
     --header-bg: #000000;
     --header-text: #ffffff;
-    --accent: #1fd1a0;
-    --accent-strong: #15a37c;
-    --accent-ink: #04120d;
+    --accent: #ffffff;
+    --accent-strong: #d4d4d4;
+    --accent-ink: #000000;
     --warm: #ffb648;
     --love: #ff5d73;
     --danger: #ff5d5d;
@@ -29,7 +29,9 @@
     --border: #dcdfdc;
     --text: #151816;
     --text-muted: #5f6762;
-    --accent-strong: #0f8f6b;
+    --accent: #111111;
+    --accent-strong: #000000;
+    --accent-ink: #ffffff;
     --shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
     color-scheme: light;
 }
@@ -89,7 +91,7 @@ main { flex: 1; width: 100%; max-width: 1200px; margin: 0 auto; padding: 24px 16
     font-size: 0.95rem;
 }
 .nav a:hover, .nav a.active { background: #1c1c1c; color: #fff; text-decoration: none; }
-.nav a.create { color: var(--accent); }
+.nav a.create { color: #ffffff; }
 .search {
     flex: 1;
     max-width: 420px;
@@ -146,7 +148,7 @@ main { flex: 1; width: 100%; max-width: 1200px; margin: 0 auto; padding: 24px 16
 .btn.on { border-color: var(--accent); color: var(--accent); }
 .btn.love.on { border-color: var(--love); color: var(--love); }
 .site-header .btn { background: #161616; border-color: #2a2a2a; color: #fff; }
-.site-header .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.site-header .btn.primary { background: #ffffff; color: #000000; border-color: #ffffff; }
 
 label { display: block; font-weight: 800; font-size: 0.9rem; margin-bottom: 6px; }
 input[type="text"], input[type="password"], input[type="email"], input[type="url"], textarea, select {
@@ -244,7 +246,7 @@ textarea { resize: vertical; min-height: 90px; }
     color: var(--text-muted);
     vertical-align: middle;
 }
-.badge.accent { background: rgba(31, 209, 160, 0.15); color: var(--accent); }
+.badge.accent { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
 .badge.warn { background: rgba(255, 182, 72, 0.15); color: var(--warm); }
 .empty { color: var(--text-muted); padding: 30px 0; text-align: center; }
 
@@ -255,7 +257,7 @@ textarea { resize: vertical; min-height: 90px; }
     border-radius: 22px;
     padding: clamp(28px, 6vw, 64px);
     background:
-        radial-gradient(circle at 85% 20%, rgba(31, 209, 160, 0.22), transparent 45%),
+        radial-gradient(circle at 85% 20%, rgba(255, 255, 255, 0.10), transparent 45%),
         radial-gradient(circle at 70% 90%, rgba(255, 182, 72, 0.16), transparent 40%),
         var(--surface);
     border: 1px solid var(--border);
