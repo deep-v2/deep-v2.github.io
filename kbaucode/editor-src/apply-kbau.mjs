@@ -76,6 +76,46 @@ edit('src/lib/brand.js', [["APP_NAME: 'TurboWarp'", "APP_NAME: 'KbauBlocks'"]]);
     console.log(`[kbau] patched webpack.config.js (${count} titles)`);
 }
 
+// 2b. Icons: KbauBlocks "K" replaces TurboWarp's favicon, app icons and manifest (deliberate overwrites).
+{
+    const assets = path.join(here, 'assets');
+    for (const [from, to] of [
+        ['favicon.ico', 'static/favicon.ico'],
+        ['favicon.png', 'static/favicon.png'],
+        ['192.png', 'static/images/192.png'],
+        ['512.png', 'static/images/512.png'],
+        ['apple-touch-icon.png', 'static/images/apple-touch-icon.png']
+    ]) {
+        const dest = path.join(gui, to);
+        if (to !== 'static/favicon.png' && !fs.existsSync(dest)) {
+            console.error(`[kbau] icon target missing upstream: ${to}`);
+            failures++;
+        }
+        fs.copyFileSync(path.join(assets, from), dest);
+        console.log(`[kbau] icon ${to}`);
+    }
+    const manifestFile = path.join(gui, 'static/manifest.webmanifest');
+    const manifest = JSON.parse(fs.readFileSync(manifestFile, 'utf8'));
+    Object.assign(manifest, {
+        short_name: 'KbauBlocks',
+        name: 'KbauBlocks',
+        description: 'Open-source block-based editor compatible with Scratch 3 projects.',
+        background_color: '#0e0e0e',
+        theme_color: '#000000'
+    });
+    fs.writeFileSync(manifestFile, `${JSON.stringify(manifest, null, 2)}\n`);
+    console.log('[kbau] patched static/manifest.webmanifest');
+    const iconLinks = '<link rel="icon" href="<%= htmlWebpackPlugin.options.root %>favicon.ico" sizes="any">\n' +
+        '    <link rel="icon" type="image/png" href="<%= htmlWebpackPlugin.options.root %>favicon.png">\n';
+    edit('src/playground/index.ejs', [[
+        '    <link rel="apple-touch-icon"', `    ${iconLinks}    <link rel="apple-touch-icon"`
+    ]]);
+    for (const rel of ['src/playground/embed.ejs', 'src/playground/simple.ejs']) {
+        edit(rel, [['<title><%= htmlWebpackPlugin.options.title %></title>',
+            `<title><%= htmlWebpackPlugin.options.title %></title>\n    ${iconLinks.trimEnd()}`]]);
+    }
+}
+
 // 3. Theme: dark grey (near-black) GUI by default, solid black top bar.
 edit('src/lib/themes/gui/dark.js', [
     ["'ui-primary': '#111111'", "'ui-primary': '#0e0e0e'"],
@@ -138,7 +178,7 @@ edit('src/components/menu-bar/tw-theme-accent.jsx', [
 edit('src/components/menu-bar/menu-bar.jsx', [
     ["import {APP_NAME} from '../../lib/brand.js';",
         `import {APP_NAME} from '../../lib/brand.js';
-import kbauLogo from './kbau-logo.svg';
+import kbauLogo from './kbau-logo.png';
 import {KbauError, saveToKbau, siteUrl} from '../../lib/kbau-cloud.js';`],
     ["            'handleClickSave',\n", "            'handleClickSave',\n            'handleClickKbauSave',\n"],
     ['    handleClickSave () {\n', `    async handleClickKbauSave () {

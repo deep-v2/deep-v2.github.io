@@ -63,7 +63,7 @@ const main = $('#main');
                         img.src = u;
                     });
                     return h('a', {class: 'project-card', href: link('collection.html', {id: c.id})},
-                        h('div', {class: 'thumb'}, c.thumbnailUrl ? img : h('img', {class: 'placeholder', src: link('logo.svg'), alt: ''})),
+                        h('div', {class: 'thumb'}, c.thumbnailUrl ? img : h('img', {class: 'placeholder', src: link('logo.png'), alt: ''})),
                         h('div', {class: 'meta'}, h('div', {class: 'title'}, c.title), h('div', {class: 'by'}, `${c.projectCount} projects`)));
                 })) : h('p', {class: 'empty'}, 'No collections yet.'));
             } else {

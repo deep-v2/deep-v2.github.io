@@ -76,7 +76,7 @@ export const avatarEl = (user, size = '') => {
     return h('span', {class: `avatar ${size}`, style: `background:${(user && user.profileColor) || '#1fd1a0'}`}, name[0].toUpperCase());
 };
 
-const PLACEHOLDER = new URL('logo.svg', siteRoot).href;
+const PLACEHOLDER = new URL('logo.png', siteRoot).href;
 export const projectCard = project => {
     const img = h('img', {alt: '', loading: 'lazy'});
     const thumb = h('div', {class: 'thumb'});
@@ -150,7 +150,7 @@ export const renderHeader = async active => {
     const right = h('div', {class: 'header-right'});
     const inner = h('div', {class: 'header-inner'},
         h('button', {class: 'menu-toggle', 'aria-label': 'Menu', html: MENU_ICON, onclick: () => nav.classList.toggle('open')}),
-        h('a', {class: 'brand', href: link('index.html')}, h('img', {src: link('logo.svg'), alt: ''}), h('span', {}, 'KbauBlocks')),
+        h('a', {class: 'brand', href: link('index.html')}, h('img', {src: link('logo.png'), alt: ''}), h('span', {}, 'KbauBlocks')),
         nav, search, right);
     header.append(inner);
     document.body.prepend(header);
