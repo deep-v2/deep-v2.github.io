@@ -64,7 +64,7 @@ jobs:
           NODE_OPTIONS: --max-old-space-size=6144
         run: npx webpack --bail
 
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v6
         with:
           name: offline-editor
           path: gui/build
@@ -91,7 +91,7 @@ jobs:
           cache: npm
           cache-dependency-path: site/kbaucode/desktop/package-lock.json
 
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v7
         with:
           name: offline-editor
           path: editor-build
