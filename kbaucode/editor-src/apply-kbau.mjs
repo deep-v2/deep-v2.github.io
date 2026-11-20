@@ -185,9 +185,41 @@ edit('src/components/menu-bar/menu-bar.jsx', [
     ["import {APP_NAME} from '../../lib/brand.js';",
         `import {APP_NAME} from '../../lib/brand.js';
 import kbauLogo from './kbau-logo.png';
-import {KbauError, saveToKbau, siteUrl} from '../../lib/kbau-cloud.js';`],
-    ["            'handleClickSave',\n", "            'handleClickSave',\n            'handleClickKbauSave',\n"],
-    ['    handleClickSave () {\n', `    async handleClickKbauSave () {
+import {KbauError, getKbauProjectInfo, saveToKbau, shareToKbau, siteUrl} from '../../lib/kbau-cloud.js';`],
+    ["            'handleClickSave',\n", "            'handleClickSave',\n            'handleClickKbauSave',\n            'handleClickKbauShare',\n"],
+    // Know whether a project opened from KbauBlocks is already shared (Share button says "Shared").
+    ["        document.addEventListener('keydown', this.handleKeyPress);\n    }\n", `        document.addEventListener('keydown', this.handleKeyPress);
+        getKbauProjectInfo().then(info => {
+            if (info && info.canEdit) this.setState({kbauShared: info.shared});
+        });
+    }
+`],
+    ['    handleClickSave () {\n', `    async handleClickKbauShare () {
+        if (this.state && this.state.kbauSharing) return;
+        // Open the tab now (inside the click) so pop-up blockers allow it; it's pointed at the page once saved.
+        const tab = window.open('', '_blank');
+        this.setState({kbauSharing: true});
+        try {
+            const result = await shareToKbau(this.props.vm, this.props.projectTitle);
+            this.setState({kbauShared: true});
+            if (tab) tab.location.href = result.url;
+            else window.location.href = result.url;
+        } catch (e) {
+            if (tab) tab.close();
+            if (e instanceof KbauError && e.message === 'NOT_SIGNED_IN') {
+                // eslint-disable-next-line no-alert
+                if (window.confirm('Sign in to KbauBlocks to share projects. Open the sign-in page in a new tab?')) {
+                    window.open(siteUrl('login.html'), '_blank');
+                }
+            } else {
+                // eslint-disable-next-line no-alert
+                alert(\`Could not share on KbauBlocks: \${e.message}\`);
+            }
+        } finally {
+            this.setState({kbauSharing: false});
+        }
+    }
+    async handleClickKbauSave () {
         this.props.onRequestCloseFile();
         if (this.state && this.state.kbauSaving) return;
         this.setState({kbauSaving: true});
@@ -245,7 +277,18 @@ import {KbauError, saveToKbau, siteUrl} from '../../lib/kbau-cloud.js';`],
                                     <MenuSection>
                                         <MenuItem
                                             onClick={this.props.onStartSelectingFileUpload}
-                                        >`]
+                                        >`],
+    // Share button next to the project title: saves to KbauBlocks, shares, opens the project page.
+    ['                    {this.props.canShare ? (\n', `                    <div className={classNames(styles.menuBarItem)}>
+                        <ShareButton
+                            className={classNames(styles.menuBarButton, styles.kbauShare, {
+                                [styles.kbauShareBusy]: this.state && this.state.kbauSharing
+                            })}
+                            isShared={!!(this.state && this.state.kbauShared)}
+                            onClick={this.handleClickKbauShare}
+                        />
+                    </div>
+                    {this.props.canShare ? (\n`]
 ]);
 // Feedback / error-report links go to KbauBlocks, not to TurboWarp's maintainer.
 const replaceAll = (rel, from, to) => {
@@ -285,6 +328,14 @@ fs.appendFileSync(path.join(gui, 'src/components/menu-bar/menu-bar.css'), `
 }
 .kbau-wordmark {
     font-size: 0.95rem;
+}
+/* Share stays clickable once shared: it saves again and opens the project page. */
+.kbau-share {
+    cursor: pointer !important;
+}
+.kbau-share-busy {
+    opacity: 0.6;
+    pointer-events: none;
 }
 `);
 console.log('[kbau] patched src/components/menu-bar/menu-bar.css');

@@ -136,10 +136,19 @@ test('create, update, version and share a project', async () => {
     assert.equal(r.body.project.version, 3);
     const sb3 = await call('GET', `/projects/${projectId}/sb3`, {token: alice});
     assert.ok(sb3.body.toString('latin1').includes('Space Game"'), 'restored v1 content');
-    r = await call('PATCH', `/projects/${projectId}`, {token: alice, json: {description: 'Fly around', instructions: 'Arrow keys'}});
+    r = await call('PATCH', `/projects/${projectId}`, {token: alice, json: {title: 'Space Game 2', description: 'Fly around', notes: 'Music by me'}});
+    assert.equal(r.body.project.title, 'Space Game 2');
     assert.equal(r.body.project.description, 'Fly around');
+    assert.equal(r.body.project.notes, 'Music by me');
+    assert.equal((await call('PATCH', `/projects/${projectId}`, {token: bob, json: {title: 'Mine now'}})).status, 404,
+        'others cannot edit (or even see) an unshared project');
+    r = await call('PATCH', `/projects/${projectId}`, {token: alice, json: {notes: 'Music and art by me'}});
+    assert.equal(r.body.project.description, 'Fly around', 'fields not sent are kept');
+    assert.equal(r.body.project.notes, 'Music and art by me');
     r = await call('POST', `/projects/${projectId}/share`, {token: alice});
     assert.equal(r.body.project.shared, true);
+    assert.equal((await call('PATCH', `/projects/${projectId}`, {token: bob, json: {title: 'Mine now'}})).status, 403,
+        'only the owner can edit the details of a shared project');
     r = await call('GET', `/projects/${projectId}`);
     assert.equal(r.status, 200);
     assert.ok(r.body.project.thumbnailUrl);

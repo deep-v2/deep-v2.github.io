@@ -88,7 +88,7 @@ export const createApi = ({db, blobs, apiPrefix = '/kbau-api', admins = [], firs
         id: String(p.id),
         title: p.title,
         description: p.description,
-        instructions: p.instructions,
+        notes: p.notes,
         shared: !!p.shared,
         hidden: !!p.hidden,
         owner: ownerFromRow(p),
@@ -475,10 +475,10 @@ export const createApi = ({db, blobs, apiPrefix = '/kbau-api', admins = [], firs
         const body = await ctx.json();
         const title = clampText(body.title, 100, 'title');
         const description = clampText(body.description, 5000, 'description');
-        const instructions = clampText(body.instructions, 5000, 'instructions');
+        const notes = clampText(body.notes, 5000, 'notes');
         await db.run(`UPDATE projects SET title = COALESCE(?, title), description = COALESCE(?, description),
-            instructions = COALESCE(?, instructions), updated_at = ? WHERE id = ?`,
-        title !== undefined ? (title.trim() || 'Untitled') : null, description ?? null, instructions ?? null, now(), p.id);
+            notes = COALESCE(?, notes), updated_at = ? WHERE id = ?`,
+        title !== undefined ? (title.trim() || 'Untitled') : null, description ?? null, notes ?? null, now(), p.id);
         return {project: await projectWithViewer(await loadProject(p.id), user)};
     });
     route('POST', '/projects/:id/share', async ctx => {

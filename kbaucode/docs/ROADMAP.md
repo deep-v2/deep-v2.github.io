@@ -10,7 +10,7 @@
 
 ## Phase 2 — Make it live and polished
 * Deploy the backend with HTTPS + backups; point `config.json` at it.
-* In-editor publish modal (title, instructions, notes, share) replacing browser dialogs.
+* In-editor publish modal (title, description, notes) replacing browser dialogs; the editor already has a Share button.
 * Verify/fix cloud variables in the editor for KbauBlocks projects.
 * Notifications, account deletion, password reset via email.
 * Localize KbauBlocks strings.

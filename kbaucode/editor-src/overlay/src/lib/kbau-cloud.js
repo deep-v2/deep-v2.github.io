@@ -124,12 +124,60 @@ const saveToKbau = async (vm, title) => {
     };
 };
 
+/**
+ * Save the open project to KbauBlocks and share it with everyone (the editor's Share button).
+ * @param {VM} vm the VM
+ * @param {string} title project title
+ * @returns {Promise<{id: string, url: string, created: boolean}>} result
+ */
+const shareToKbau = async (vm, title) => {
+    const saved = await saveToKbau(vm, title);
+    const api = await getApiBase();
+    const res = await fetch(`${api}/projects/${encodeURIComponent(saved.id)}/share`, {
+        method: 'POST',
+        headers: {Authorization: `Bearer ${getToken()}`}
+    });
+    if (res.status === 401) throw new KbauError('NOT_SIGNED_IN');
+    if (!res.ok) {
+        let body = null;
+        try {
+            body = await res.json();
+        } catch (e) {
+            // ignore
+        }
+        throw new KbauError((body && body.error) || `Server responded with ${res.status}`);
+    }
+    return saved;
+};
+
+/**
+ * For a project opened with ?kbau_project=<id>: is it yours, and is it shared?
+ * @returns {Promise<{shared: boolean, canEdit: boolean}|null>} info, or null if unknown
+ */
+const getKbauProjectInfo = async () => {
+    const id = getKbauProjectId();
+    const api = await getApiBase();
+    if (!id || !api) return null;
+    try {
+        const token = getToken();
+        const res = await fetch(`${api}/projects/${encodeURIComponent(id)}`, {
+            headers: token ? {Authorization: `Bearer ${token}`} : {}
+        });
+        if (!res.ok) return null;
+        const {project} = await res.json();
+        return {shared: !!project.shared, canEdit: !!project.canEdit};
+    } catch (e) {
+        return null;
+    }
+};
 
 export {
     KbauError,
     getApiBase,
+    getKbauProjectInfo,
     getToken,
     saveToKbau,
+    shareToKbau,
     siteUrl
 };
 

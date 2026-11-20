@@ -44,7 +44,48 @@ const reportDialog = async (targetType, targetId) => {
     const right = h('div');
     main.append(h('div', {class: 'project-layout'}, left, right));
 
-    const titleEl = h('h1', {style: 'margin-top:4px'}, project.title);
+    // Owners edit the title, Description and Notes right here; each saves when you click away.
+    const saveState = h('span', {class: 'save-state muted small', 'aria-live': 'polite'});
+    const saveField = async (field, value) => {
+        if (value === project[field]) return;
+        saveState.textContent = 'Saving…';
+        try {
+            ({project} = await api.patch(`/projects/${project.id}`, {[field]: value}));
+            document.title = `${project.title} · KbauBlocks`;
+            saveState.textContent = 'Saved';
+            setTimeout(() => {
+                if (saveState.textContent === 'Saved') saveState.textContent = '';
+            }, 2000);
+        } catch (e) {
+            saveState.textContent = '';
+            toast(`Couldn't save: ${e.message}`);
+        }
+    };
+    const editableText = (field, placeholder, emptyText) => {
+        if (!isOwner) return h('div', {class: 'prose'}, project[field] || h('span', {class: 'muted'}, emptyText));
+        const ta = h('textarea', {class: 'inline-edit', maxlength: 5000, placeholder, 'aria-label': placeholder}, project[field]);
+        const grow = () => {
+            ta.style.height = 'auto';
+            ta.style.height = `${Math.max(90, ta.scrollHeight + 2)}px`;
+        };
+        ta.addEventListener('input', grow);
+        ta.addEventListener('change', () => saveField(field, ta.value));
+        requestAnimationFrame(grow);
+        return ta;
+    };
+    let titleEl;
+    if (isOwner) {
+        titleEl = h('input', {class: 'title-input', type: 'text', maxlength: 100, value: project.title, 'aria-label': 'Project title'});
+        titleEl.addEventListener('keydown', e => {
+            if (e.key === 'Enter') titleEl.blur();
+        });
+        titleEl.addEventListener('change', () => {
+            if (!titleEl.value.trim()) titleEl.value = 'Untitled';
+            saveField('title', titleEl.value.trim());
+        });
+    } else {
+        titleEl = h('h1', {style: 'margin-top:4px'}, project.title);
+    }
     const ownerLine = h('div', {class: 'owner-line'}, avatarEl(project.owner),
         h('div', {},
             h('a', {href: link('user.html', {u: project.owner.username}), style: 'font-weight:800;color:var(--text)'}, project.owner.displayName), verifiedTick(project.owner),
@@ -53,6 +94,7 @@ const reportDialog = async (targetType, targetId) => {
                 ` · Updated ${timeAgo(project.updatedAt)}`)));
     const statusBadges = h('div', {class: 'row', style: 'margin-bottom:6px'},
         !project.shared ? h('span', {class: 'badge warn'}, 'Unshared — only you can see this') : null,
+        !project.shared && isOwner ? shareButton(project) : null,
         project.hidden ? h('span', {class: 'badge warn'}, 'Hidden by moderators') : null);
     left.append(statusBadges, h('div', {class: 'player'}, iframe));
 
@@ -110,10 +152,12 @@ const reportDialog = async (targetType, targetId) => {
             h('a', {href: link('project.html', {id: project.remixOf.id})}, project.remixOf.title),
             project.remixOf.owner ? ` by ${project.remixOf.owner}` : ''));
     }
-    const instructions = h('div', {class: 'prose'}, project.instructions || h('span', {class: 'muted'}, 'No instructions.'));
-    const description = h('div', {class: 'prose'}, project.description || h('span', {class: 'muted'}, 'No notes or credits.'));
-    right.append(h('div', {class: 'card', style: 'margin-bottom:14px'}, h('h3', {}, 'Instructions'), instructions),
-        h('div', {class: 'card'}, h('h3', {}, 'Notes and credits'), description));
+    right.append(
+        h('div', {class: 'card', style: 'margin-bottom:14px'}, h('h3', {}, 'Description'),
+            editableText('description', 'What is your project about? How do you play it?', 'No description.')),
+        h('div', {class: 'card'}, h('h3', {}, 'Notes'),
+            editableText('notes', 'Credits, changelog, anything else people should know.', 'No notes.')));
+    if (isOwner) right.append(h('div', {class: 'small muted', style: 'margin-top:6px;min-height:1.4em'}, saveState));
 
     if (isOwner || isMod) right.append(ownerPanel(project, isOwner, isMod));
 
@@ -136,36 +180,9 @@ function ownerPanel (project, isOwner, isMod) {
     const render = () => {
         panel.replaceChildren(h('h3', {}, isOwner ? 'Manage project' : 'Moderation'), msg);
         if (isOwner) {
-            const title = h('input', {type: 'text', id: 'p-title', value: project.title, maxlength: 100});
-            const instructions = h('textarea', {id: 'p-ins', maxlength: 5000}, project.instructions);
-            const description = h('textarea', {id: 'p-desc', maxlength: 5000}, project.description);
-            const save = h('button', {class: 'btn primary', onclick: async () => {
-                save.disabled = true;
-                try {
-                    ({project} = await api.patch(`/projects/${project.id}`, {
-                        title: title.value, instructions: instructions.value, description: description.value
-                    }));
-                    toast('Saved');
-                    setTimeout(() => location.reload(), 400);
-                } catch (e) {
-                    msg.replaceChildren(errorNotice(e));
-                    save.disabled = false;
-                }
-            }}, 'Save details');
-            const shareBtn = h('button', {class: `btn ${project.shared ? '' : 'primary'}`, onclick: async () => {
-                try {
-                    ({project} = await api.post(`/projects/${project.id}/${project.shared ? 'unshare' : 'share'}`));
-                    toast(project.shared ? 'Shared with everyone!' : 'Unshared');
-                    setTimeout(() => location.reload(), 400);
-                } catch (e) {
-                    msg.replaceChildren(errorNotice(e));
-                }
-            }}, project.shared ? 'Unshare' : 'Share');
             panel.append(
-                h('div', {class: 'field'}, h('label', {for: 'p-title'}, 'Title'), title),
-                h('div', {class: 'field'}, h('label', {for: 'p-ins'}, 'Instructions'), instructions),
-                h('div', {class: 'field'}, h('label', {for: 'p-desc'}, 'Notes and credits'), description),
-                h('div', {class: 'row'}, save, shareBtn, h('span', {class: 'spacer'}),
+                h('p', {class: 'muted small', style: 'margin-top:0'}, 'Edit the title, Description and Notes above; they save automatically.'),
+                h('div', {class: 'row'}, shareButton(project, msg), h('span', {class: 'spacer'}),
                     h('button', {class: 'btn danger', onclick: () => deleteProject(project)}, 'Delete')));
             const versions = h('div', {class: 'small', style: 'margin-top:16px'});
             panel.append(h('h3', {style: 'margin-top:18px'}, 'Version history'), versions);
@@ -195,6 +212,19 @@ function ownerPanel (project, isOwner, isMod) {
     };
     render();
     return panel;
+}
+
+function shareButton (project, msg) {
+    return h('button', {class: `btn ${project.shared ? '' : 'primary'}`, onclick: async () => {
+        try {
+            ({project} = await api.post(`/projects/${project.id}/${project.shared ? 'unshare' : 'share'}`));
+            toast(project.shared ? 'Shared with everyone!' : 'Unshared');
+            setTimeout(() => location.reload(), 400);
+        } catch (e) {
+            if (msg) msg.replaceChildren(errorNotice(e));
+            else toast(e.message);
+        }
+    }}, project.shared ? 'Unshare' : 'Share');
 }
 
 async function deleteProject (project) {

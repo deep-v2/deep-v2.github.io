@@ -446,6 +446,36 @@ h1 .verified { width: 0.8em; height: 0.8em; }
 .search-suggest .suggest-icon svg { width: 18px; height: 18px; margin: 0; color: inherit; }
 .search-suggest .verified svg { margin: 0; }
 
+/* Project page: owners edit the title, Description and Notes in place */
+input.title-input[type="text"] {
+    width: 100%;
+    margin: 4px 0 8px;
+    padding: 4px 8px;
+    margin-left: -8px;
+    font: inherit;
+    font-size: 2rem;
+    font-weight: 900;
+    line-height: 1.2;
+    color: var(--text);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 10px;
+}
+input.title-input[type="text"]:hover { border-color: var(--border); }
+input.title-input[type="text"]:focus { background: var(--surface-2); border-color: var(--border); outline: none; }
+textarea.inline-edit {
+    width: 100%;
+    min-height: 90px;
+    resize: vertical;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font: inherit;
+    padding: 10px 12px;
+    overflow: hidden;
+}
+
 @media (max-width: 900px) {
     .project-layout { grid-template-columns: 1fr; }
     .hero .blocks { display: none; }
