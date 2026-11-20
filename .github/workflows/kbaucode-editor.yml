@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out site
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           path: site
 
@@ -31,14 +31,14 @@ jobs:
         run: echo "sha=$(tr -d '[:space:]' < site/kbaucode/editor-src/TURBOWARP_COMMIT)" >> "$GITHUB_OUTPUT"
 
       - name: Check out TurboWarp scratch-gui
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: TurboWarp/scratch-gui
           ref: ${{ steps.pin.outputs.sha }}
           path: gui
           persist-credentials: false
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm

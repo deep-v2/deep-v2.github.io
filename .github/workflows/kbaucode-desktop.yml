@@ -2,6 +2,8 @@
 # and publishes it as a GitHub Release. The site's Download page links to the latest release's files:
 #   https://github.com/<repo>/releases/latest/download/KbauBlocks-Setup.exe
 #   https://github.com/<repo>/releases/latest/download/KbauBlocks-Portable.exe
+#
+# Two jobs for speed: the editor (the slow part) is built on Linux; Windows only packages it with Electron.
 name: KbauBlocks desktop build
 
 on:
@@ -21,14 +23,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
-    runs-on: windows-latest
-    defaults:
-      run:
-        shell: bash
+  editor:
+    name: Build offline editor (Linux)
+    runs-on: ubuntu-latest
     steps:
       - name: Check out site
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           path: site
 
@@ -37,20 +37,18 @@ jobs:
         run: echo "sha=$(tr -d '[:space:]' < site/kbaucode/editor-src/TURBOWARP_COMMIT)" >> "$GITHUB_OUTPUT"
 
       - name: Check out TurboWarp scratch-gui
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: TurboWarp/scratch-gui
           ref: ${{ steps.pin.outputs.sha }}
           path: gui
           persist-credentials: false
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: |
-            gui/package-lock.json
-            site/kbaucode/desktop/package-lock.json
+          cache-dependency-path: gui/package-lock.json
 
       - name: Install editor dependencies
         working-directory: gui
@@ -66,16 +64,48 @@ jobs:
           NODE_OPTIONS: --max-old-space-size=6144
         run: npx webpack --bail
 
+      - uses: actions/upload-artifact@v5
+        with:
+          name: offline-editor
+          path: gui/build
+          retention-days: 3
+
+  package:
+    name: Package Windows app
+    needs: editor
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out site
+        uses: actions/checkout@v5
+        with:
+          path: site
+          sparse-checkout: |
+            kbaucode/desktop
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: site/kbaucode/desktop/package-lock.json
+
+      - uses: actions/download-artifact@v5
+        with:
+          name: offline-editor
+          path: editor-build
+
       - name: Install desktop dependencies
         working-directory: site/kbaucode/desktop
         run: npm ci
 
-      - name: Package Windows app
+      - name: Package
         working-directory: site/kbaucode/desktop
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: |
-          node prepare-app.mjs ../../../gui/build
+          node prepare-app.mjs ../../../editor-build
           npm version --no-git-tag-version "1.0.${{ github.run_number }}"
           npx electron-builder --win --publish never
           ls -la dist
