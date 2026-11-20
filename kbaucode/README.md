@@ -9,7 +9,7 @@ A universal, open-source, Scratch-compatible creation platform:
 
 | | |
 |---|---|
-| Open the site | `index.html` (on kbau.lol: <https://kbau.lol/kbaucode/>) |
+| Open the site | `index.html` (on kbau.lol: <https://kbau.lol/>) |
 | Open the editor | `editor/editor.html` |
 | Run everything locally | `cd server && npm start` → <http://localhost:8787/> |
 | Hosting (Cloudflare) | [docs/HOSTING.md](docs/HOSTING.md) |

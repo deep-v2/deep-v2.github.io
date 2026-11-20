@@ -1,5 +1,5 @@
 # Builds the KbauBlocks editor (TurboWarp scratch-gui + kbaucode/editor-src patch set)
-# and commits the static build to kbaucode/editor/ so GitHub Pages serves it.
+# and commits the static build to editor/ (served at kbau.lol/editor/) so GitHub Pages serves it.
 name: KbauBlocks editor build
 
 on:
@@ -60,30 +60,32 @@ jobs:
 
       - name: Copy build into site
         run: |
-          rm -rf site/kbaucode/editor
-          mkdir -p site/kbaucode/editor
-          cp -r gui/build/. site/kbaucode/editor/
+          rm -rf site/editor
+          mkdir -p site/editor
+          cp -r gui/build/. site/editor/
+          # kbau.lol/editor/ opens the editor (TurboWarp's index.html is the player-only view)
+          cp site/editor/editor.html site/editor/index.html
           # GitHub Pages (Jekyll) ignores paths starting with "_"; fail if any exist.
-          if find site/kbaucode/editor -name '_*' | grep -q .; then
+          if find site/editor -name '_*' | grep -q .; then
             echo "::error::Build contains paths starting with '_' that Jekyll would hide"
-            find site/kbaucode/editor -name '_*'
+            find site/editor -name '_*'
             exit 1
           fi
-          cat > site/kbaucode/editor/BUILD_INFO.txt <<EOF
+          cat > site/editor/BUILD_INFO.txt <<EOF
           KbauBlocks editor build
           TurboWarp scratch-gui commit: ${{ steps.pin.outputs.sha }}
           Site commit: ${{ github.sha }}
           Built: $(date -u +%Y-%m-%dT%H:%M:%SZ)
           Source: https://github.com/${{ github.repository }}/tree/main/kbaucode/editor-src
           EOF
-          du -sh site/kbaucode/editor
+          du -sh site/editor
 
       - name: Commit build
         working-directory: site
         run: |
           git config user.name "kbaublocks-bot"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A kbaucode/editor
+          git add -A editor
           if git diff --cached --quiet; then
             echo "No changes"
             exit 0

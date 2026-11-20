@@ -1,7 +1,7 @@
 # KbauBlocks — Technical architecture
 
 ```
-                         ┌──────────────────────── same origin (e.g. kbau.lol/kbaucode/) ─────────────────────────┐
+                         ┌──────────────────────── same origin (e.g. kbau.lol/) ─────────────────────────┐
   Browser                │                                                                                         │
                          │  Website (static HTML + ES modules)          Editor (built TurboWarp GUI + KbauBlocks patches)│
                          │  index / explore / project / user / ...      editor.html, embed.html, addons.html            │

@@ -4,8 +4,8 @@ Last updated: 2026-11-16. Read this first when continuing development.
 
 ## Where things are
 
-* Live (static): `https://kbau.lol/kbaucode/` (repo `deep-v2/deep-v2.github.io`, folder `kbaucode/`, GitHub Pages with CNAME kbau.lol).
-* Editor: `kbaucode/editor/` is **generated** by `.github/workflows/kbaucode-editor.yml` from `kbaucode/editor-src/`. Edit the patch script/overlay, push, and the workflow rebuilds and commits the editor (~5 min).
+* Live (static): `https://kbau.lol/` (repo `deep-v2/deep-v2.github.io`, GitHub Pages with CNAME kbau.lol). The website pages, `css/`, `js/` and `editor/` live at the **repo root**; `kbaucode/` holds the source (server, editor-src, docs) plus redirect stubs so old `kbau.lol/kbaucode/...` links still work.
+* Editor: `editor/` (repo root, served at `kbau.lol/editor/`) is **generated** by `.github/workflows/kbaucode-editor.yml` from `kbaucode/editor-src/`. Edit the patch script/overlay, push, and the workflow rebuilds and commits the editor (~5 min).
 * Backend: **live on Cloudflare** at `https://kbaublocks-api.kbaudasher.workers.dev/kbau-api` (Worker + D1 + R2 + Durable Objects). Source `kbaucode/server/`; deploy/admin/backup steps in `docs/HOSTING.md`. Self-host with `npm start` (Node ≥ 22.13).
 * Docs: `docs/RESEARCH.md` (ecosystem + licensing), `docs/ARCHITECTURE.md` (design + API), `docs/ROADMAP.md` (phases).
 
@@ -40,6 +40,6 @@ Last updated: 2026-11-16. Read this first when continuing development.
 
 * The local Windows machine is low on disk and has path-length limits: build the editor on CI, and clone to a short path (e.g. `C:\kb\site`) with `core.longpaths=true`.
 * `apply-kbau.mjs` asserts every anchor. When bumping `TURBOWARP_COMMIT`, run it against a fresh checkout and fix any reported anchors.
-* Do not hand-edit `kbaucode/editor/` — the next build overwrites it.
+* Do not hand-edit `editor/` — the next build overwrites it.
 * GitHub Pages runs Jekyll; the workflow fails if the build contains paths starting with `_`.
 * The editor's own theme setting key is `kbau:theme`; the website's is `kbau:site-theme`; auth is `kbau:token` / `kbau:user`; API override is `kbau:api`. Editor and site must stay on the same origin to share auth.

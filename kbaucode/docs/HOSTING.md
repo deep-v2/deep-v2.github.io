@@ -4,7 +4,7 @@
 
 | Piece | Where |
 |---|---|
-| Website + editor (static) | GitHub Pages: `https://kbau.lol/kbaucode/` |
+| Website + editor (static) | GitHub Pages: `https://kbau.lol/` |
 | API | Cloudflare Worker `kbaublocks-api`: `https://kbaublocks-api.kbaudasher.workers.dev/kbau-api` |
 | Database | Cloudflare D1 `kbaublocks` (id in `server/wrangler.jsonc`) |
 | Project files, thumbnails, avatars | Cloudflare R2 bucket `kbaublocks-files` |
