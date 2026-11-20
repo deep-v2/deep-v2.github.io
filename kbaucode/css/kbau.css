@@ -311,9 +311,16 @@ textarea { resize: vertical; min-height: 90px; }
 .replies { margin-left: 40px; }
 
 /* Profile */
-.profile-banner { height: 120px; border-radius: 22px 22px 0 0; }
-.profile-head { display: flex; gap: 18px; align-items: flex-end; margin-top: -48px; padding: 0 20px; flex-wrap: wrap; }
-.profile-head .avatar { border: 4px solid var(--bg); }
+/* Banner fades from the profile colour (top) into the card colour (bottom), so the name sits on plain UI grey. */
+.profile-banner { position: relative; height: 170px; }
+.profile-banner::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to bottom, transparent 0%, transparent 15%, var(--surface) 92%);
+}
+.profile-head { position: relative; display: flex; gap: 18px; align-items: flex-end; margin-top: -84px; padding: 0 20px; flex-wrap: wrap; }
+.profile-head .avatar { border: 4px solid var(--surface); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35); }
 .stat-row { display: flex; gap: 22px; flex-wrap: wrap; margin: 10px 0; }
 .stat-row b { display: block; font-size: 1.2rem; }
 
