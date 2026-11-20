@@ -398,6 +398,52 @@ textarea { resize: vertical; min-height: 90px; }
 footer.site-footer { border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.85rem; }
 footer .inner { max-width: 1200px; margin: 0 auto; padding: 22px 16px; display: flex; gap: 18px; flex-wrap: wrap; }
 
+/* Verified tick */
+.verified { display: inline-flex; vertical-align: -0.12em; margin-left: 0.3em; width: 1em; height: 1em; flex: none; }
+.verified svg { width: 100%; height: 100%; margin: 0; }
+.verified .seal { fill: var(--accent); }
+.verified .check { stroke: var(--accent-ink); }
+.user-name { display: inline-flex; align-items: center; min-width: 0; }
+h1 .verified { width: 0.8em; height: 0.8em; }
+
+/* People lists (followers, following, friends, user search) */
+.user-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+.user-card { display: flex; align-items: center; gap: 12px; padding: 12px; color: var(--text); }
+.user-card:hover { border-color: var(--accent); text-decoration: none; }
+.user-card-text { display: flex; flex-direction: column; min-width: 0; }
+.user-card-text b, .user-card-text span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stat-link { background: none; border: 0; padding: 0; text-align: left; color: inherit; font: inherit; cursor: pointer; }
+.stat-link:hover span { color: var(--text); text-decoration: underline; }
+
+/* Search box dropdown */
+.search { position: relative; }
+.search-suggest {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    right: 0;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    padding: 6px;
+    z-index: 50;
+}
+.search-suggest .suggest-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 0.95rem;
+}
+.search-suggest .suggest-item:hover, .search-suggest .suggest-item.active { background: var(--surface-3); text-decoration: none; }
+.search-suggest .suggest-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.search-suggest .suggest-icon { width: 30px; display: inline-flex; justify-content: center; color: var(--text-muted); flex: none; }
+.search-suggest .suggest-icon svg { width: 18px; height: 18px; margin: 0; color: inherit; }
+.search-suggest .verified svg { margin: 0; }
+
 @media (max-width: 900px) {
     .project-layout { grid-template-columns: 1fr; }
     .hero .blocks { display: none; }

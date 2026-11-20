@@ -1,6 +1,7 @@
 import {embedUrl} from '../api.js';
 import {
-    $, api, avatarEl, boot, editorUrl, errorNotice, fmt, h, link, modal, offlineNotice, param, projectGrid, timeAgo, toast
+    $, api, avatarEl, boot, editorUrl, errorNotice, fmt, h, link, modal, offlineNotice, param, projectGrid, timeAgo, toast,
+    verifiedTick
 } from '../ui.js';
 
 const main = $('#main');
@@ -46,7 +47,7 @@ const reportDialog = async (targetType, targetId) => {
     const titleEl = h('h1', {style: 'margin-top:4px'}, project.title);
     const ownerLine = h('div', {class: 'owner-line'}, avatarEl(project.owner),
         h('div', {},
-            h('a', {href: link('user.html', {u: project.owner.username}), style: 'font-weight:800;color:var(--text)'}, project.owner.displayName),
+            h('a', {href: link('user.html', {u: project.owner.username}), style: 'font-weight:800;color:var(--text)'}, project.owner.displayName), verifiedTick(project.owner),
             h('div', {class: 'muted small'},
                 project.shared ? `Shared ${timeAgo(project.sharedAt)}` : 'Not shared',
                 ` · Updated ${timeAgo(project.updatedAt)}`)));
@@ -263,7 +264,7 @@ function renderComments (box, project, user, isOwner, isMod) {
         const canDelete = user && (user.username === c.author.username || isOwner || isMod);
         const el = h('div', {class: 'comment'}, avatarEl(c.author, 'sm'),
             h('div', {class: 'body'},
-                h('div', {class: 'head'}, h('a', {href: link('user.html', {u: c.author.username})}, c.author.displayName),
+                h('div', {class: 'head'}, h('a', {href: link('user.html', {u: c.author.username})}, c.author.displayName), verifiedTick(c.author),
                     h('span', {class: 'muted'}, timeAgo(c.createdAt))),
                 h('div', {class: 'text'}, c.hidden ? h('em', {class: 'muted'}, 'This comment was removed by a moderator.') : c.content),
                 h('div', {class: 'tools'},

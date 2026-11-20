@@ -80,6 +80,22 @@ export const avatarEl = (user, size = '') => {
 };
 const DEFAULT_AVATAR = new URL('default-avatar.png', siteRoot).href;
 
+// Verified tick: shown after names of staff and accounts an admin has verified.
+export const verifiedTick = user => {
+    if (!user || !user.verified) return null;
+    const label = user.role === 'admin' || user.role === 'moderator' ? 'Verified · KbauBlocks staff' : 'Verified';
+    return h('span', {class: 'verified', title: label, 'aria-label': label, role: 'img', html:
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="seal" d="M12 1.5l2.6 2.1 3.3-.4 1.2 3.1 3.1 1.2-.4 3.3 2.1 2.6-2.1 2.6.4 3.3-3.1 1.2-1.2 3.1-3.3-.4L12 22.5l-2.6-2.1-3.3.4-1.2-3.1-3.1-1.2.4-3.3L.1 12l2.1-2.6-.4-3.3 3.1-1.2 1.2-3.1 3.3.4z"/>' +
+        '<path class="check" d="M7.5 12.4l3 3 6-6.3" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>'});
+};
+export const userName = (user, attrs = {}) => h('span', {class: 'user-name', ...attrs},
+    user.displayName || user.username, verifiedTick(user));
+
+export const userGrid = (users, emptyText = 'Nobody here yet.') => (users.length ?
+    h('div', {class: 'user-grid'}, users.map(u => h('a', {class: 'user-card card', href: link('user.html', {u: u.username})},
+        avatarEl(u), h('div', {class: 'user-card-text'}, h('b', {}, userName(u)), h('span', {class: 'muted small'}, `@${u.username}`))))) :
+    h('p', {class: 'empty'}, emptyText));
+
 const PLACEHOLDER = new URL('logo.png', siteRoot).href;
 export const projectCard = project => {
     const img = h('img', {alt: '', loading: 'lazy'});
@@ -97,7 +113,7 @@ export const projectCard = project => {
         h('div', {class: 'meta'},
             h('div', {class: 'title', title: project.title}, project.title,
                 !project.shared ? h('span', {class: 'badge warn', style: 'margin-left:6px'}, 'Unshared') : null),
-            h('div', {class: 'by'}, project.owner ? project.owner.displayName || project.owner.username : ''),
+            h('div', {class: 'by'}, project.owner ? userName(project.owner) : ''),
             h('div', {class: 'stats'},
                 h('span', {title: 'Views'}, `👁 ${fmt(project.stats.views)}`),
                 h('span', {title: 'Loves'}, `♥ ${fmt(project.stats.loves)}`),
@@ -142,6 +158,78 @@ document.documentElement.dataset.theme = getSiteTheme();
 const SEARCH_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>';
 const MENU_ICON = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>';
 
+const USER_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg>';
+
+// Search box dropdown: the user whose name matches exactly, then "Search users" and "Search projects".
+const attachSearchSuggest = (form, input) => {
+    const box = h('div', {class: 'search-suggest hidden', role: 'listbox', id: 'search-suggest'});
+    input.setAttribute('autocomplete', 'off');
+    input.setAttribute('aria-controls', 'search-suggest');
+    form.append(box);
+    let seq = 0;
+    let timer = null;
+    let active = -1;
+    let exactUser = null;
+    const options = () => [...box.querySelectorAll('.suggest-item')];
+    const highlight = i => {
+        const items = options();
+        active = items.length ? (i + items.length) % items.length : -1;
+        items.forEach((el, n) => el.classList.toggle('active', n === active));
+    };
+    const render = term => {
+        if (!term) {
+            box.classList.add('hidden');
+            return;
+        }
+        const item = (href, icon, ...label) => h('a', {class: 'suggest-item', role: 'option', href}, icon, h('span', {class: 'suggest-label'}, ...label));
+        const icon = svg => h('span', {class: 'suggest-icon', html: svg});
+        box.replaceChildren(
+            exactUser ? item(link('user.html', {u: exactUser.username}), avatarEl(exactUser, 'sm'),
+                h('b', {}, userName(exactUser)), h('span', {class: 'muted small'}, ` @${exactUser.username}`)) : null,
+            item(link('explore.html', {q: term, type: 'users'}), icon(USER_ICON), 'Search users ', h('span', {class: 'muted'}, `“${term}”`)),
+            item(link('explore.html', {q: term, type: 'projects'}), icon(SEARCH_ICON), 'Search projects ', h('span', {class: 'muted'}, `“${term}”`)));
+        box.classList.remove('hidden');
+        active = -1;
+    };
+    const lookup = async term => {
+        const mine = ++seq;
+        let found = null;
+        try {
+            const {users} = await api.get(`/search?q=${encodeURIComponent(term)}&type=users&limit=1`);
+            if (users[0] && users[0].username.toLowerCase() === term.toLowerCase()) found = users[0];
+        } catch (e) {
+            // offline or no server: just no user row
+        }
+        if (mine !== seq || input.value.trim() !== term) return;
+        exactUser = found;
+        render(term);
+    };
+    input.addEventListener('input', () => {
+        const term = input.value.trim();
+        exactUser = exactUser && term.toLowerCase() === exactUser.username.toLowerCase() ? exactUser : null;
+        render(term);
+        clearTimeout(timer);
+        seq++;
+        if (term && /^[A-Za-z0-9_-]{1,20}$/.test(term)) timer = setTimeout(() => lookup(term), 180);
+    });
+    input.addEventListener('focus', () => render(input.value.trim()));
+    input.addEventListener('keydown', e => {
+        if (box.classList.contains('hidden')) return;
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            e.preventDefault();
+            highlight(active + (e.key === 'ArrowDown' ? 1 : -1));
+        } else if (e.key === 'Enter' && active >= 0) {
+            e.preventDefault();
+            location.href = options()[active].href;
+        } else if (e.key === 'Escape') {
+            box.classList.add('hidden');
+        }
+    });
+    document.addEventListener('click', e => {
+        if (!form.contains(e.target)) box.classList.add('hidden');
+    });
+};
+
 export const renderHeader = async active => {
     const header = h('header', {class: 'site-header'});
     const nav = h('nav', {class: 'nav', 'aria-label': 'Main'},
@@ -151,6 +239,7 @@ export const renderHeader = async active => {
     const searchInput = h('input', {type: 'search', name: 'q', placeholder: 'Search projects and people', 'aria-label': 'Search', value: active === 'explore' ? (param('q') || '') : ''});
     const search = h('form', {class: 'search', role: 'search', action: link('explore.html'), method: 'get', html: SEARCH_ICON});
     search.append(searchInput);
+    attachSearchSuggest(search, searchInput);
     const right = h('div', {class: 'header-right'});
     const inner = h('div', {class: 'header-inner'},
         h('button', {class: 'menu-toggle', 'aria-label': 'Menu', html: MENU_ICON, onclick: () => nav.classList.toggle('open')}),

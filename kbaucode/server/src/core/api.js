@@ -47,7 +47,7 @@ export const CORS = {
 const PROJECT_SELECT = `SELECT p.*,
     u.username AS o_username, u.display_name AS o_display_name, u.profile_color AS o_profile_color,
     u.has_avatar AS o_has_avatar, u.role AS o_role, u.banned AS o_banned, u.created_at AS o_created_at,
-    u.bio AS o_bio, u.working_on AS o_working_on,
+    u.bio AS o_bio, u.working_on AS o_working_on, u.verified AS o_verified,
     rp.id AS r_id, rp.title AS r_title, ru.username AS r_owner,
     (rp.shared = 1 AND rp.hidden = 0 AND rp.deleted = 0) AS r_visible
     FROM projects p
@@ -64,6 +64,8 @@ export const createApi = ({db, blobs, apiPrefix = '/kbau-api', admins = [], firs
     let dummyHash = null;
 
     // ---------- serializers ----------
+    // The tick: set by an admin, or automatic for staff.
+    const isVerified = u => !!u.verified || u.role === 'admin' || u.role === 'moderator';
     const userOut = u => u && ({
         id: u.id,
         username: u.username,
@@ -73,12 +75,14 @@ export const createApi = ({db, blobs, apiPrefix = '/kbau-api', admins = [], firs
         profileColor: u.profile_color,
         avatarUrl: u.has_avatar ? `/users/${encodeURIComponent(u.username)}/avatar?v=${u.has_avatar}` : null,
         role: u.role,
+        verified: isVerified(u),
         banned: !!u.banned,
         createdAt: u.created_at
     });
     const ownerFromRow = p => userOut({
         id: p.owner_id, username: p.o_username, display_name: p.o_display_name, bio: p.o_bio, working_on: p.o_working_on,
-        profile_color: p.o_profile_color, has_avatar: p.o_has_avatar, role: p.o_role, banned: p.o_banned, created_at: p.o_created_at
+        profile_color: p.o_profile_color, has_avatar: p.o_has_avatar, role: p.o_role, banned: p.o_banned, created_at: p.o_created_at,
+        verified: p.o_verified
     });
     const projectOut = p => p && ({
         id: String(p.id),
@@ -121,7 +125,8 @@ export const createApi = ({db, blobs, apiPrefix = '/kbau-api', admins = [], firs
         return out;
     };
     const COMMENT_SELECT = `SELECT c.*, u.username AS a_username, u.display_name AS a_display_name, u.has_avatar AS a_has_avatar,
-        u.profile_color AS a_profile_color FROM comments c JOIN users u ON u.id = c.author_id`;
+        u.profile_color AS a_profile_color, u.verified AS a_verified, u.role AS a_role
+        FROM comments c JOIN users u ON u.id = c.author_id`;
     const commentOut = c => ({
         id: c.id,
         projectId: String(c.project_id),
@@ -132,6 +137,7 @@ export const createApi = ({db, blobs, apiPrefix = '/kbau-api', admins = [], firs
             username: c.a_username,
             displayName: c.a_display_name || c.a_username,
             profileColor: c.a_profile_color,
+            verified: isVerified({verified: c.a_verified, role: c.a_role}),
             avatarUrl: c.a_has_avatar ? `/users/${encodeURIComponent(c.a_username)}/avatar?v=${c.a_has_avatar}` : null
         },
         createdAt: c.created_at
@@ -307,9 +313,57 @@ export const createApi = ({db, blobs, apiPrefix = '/kbau-api', admins = [], firs
             (SELECT COUNT(*) FROM projects p WHERE p.owner_id = ? AND ${SHARED}) AS shared,
             (SELECT COALESCE(SUM(love_count), 0) FROM projects p WHERE p.owner_id = ? AND ${SHARED}) AS loves,
             (SELECT COALESCE(SUM(view_count), 0) FROM projects p WHERE p.owner_id = ? AND ${SHARED}) AS views,
-            (SELECT COUNT(*) FROM collections WHERE owner_id = ?) AS collections`, u.id, u.id, u.id, u.id);
-        return {user: userOut(u), stats};
+            (SELECT COUNT(*) FROM collections WHERE owner_id = ?) AS collections,
+            (SELECT COUNT(*) FROM follows f JOIN users x ON x.id = f.follower_id WHERE f.followee_id = ? AND x.banned = 0) AS followers,
+            (SELECT COUNT(*) FROM follows f JOIN users x ON x.id = f.followee_id WHERE f.follower_id = ? AND x.banned = 0) AS following,
+            (SELECT COUNT(*) FROM follows a JOIN follows b ON b.follower_id = a.followee_id AND b.followee_id = a.follower_id
+                JOIN users x ON x.id = a.followee_id WHERE a.follower_id = ? AND x.banned = 0) AS friends`,
+        u.id, u.id, u.id, u.id, u.id, u.id, u.id);
+        const out = {user: userOut(u), stats};
+        if (ctx.user && ctx.user.id !== u.id) out.relationship = await relationship(ctx.user.id, u.id);
+        return out;
     });
+
+    // Follows: following is one-way; two people who follow each other are friends.
+    const relationship = async (viewerId, otherId) => {
+        const r = await db.get(`SELECT
+            EXISTS(SELECT 1 FROM follows WHERE follower_id = ? AND followee_id = ?) AS following,
+            EXISTS(SELECT 1 FROM follows WHERE follower_id = ? AND followee_id = ?) AS followed_by`,
+        viewerId, otherId, otherId, viewerId);
+        return {following: !!r.following, followedBy: !!r.followed_by, friends: !!(r.following && r.followed_by)};
+    };
+    const setFollow = async (ctx, on) => {
+        const me = requireUser(ctx);
+        const target = await getUserByName(ctx.params.username);
+        if (target.id === me.id) throw new HttpError(400, 'You cannot follow yourself.');
+        if (on) {
+            if (target.banned) throw new HttpError(404, 'User not found.');
+            await rateLimit(`follow:${me.id}`, 200, 3600_000);
+            await db.run('INSERT INTO follows (follower_id, followee_id, created_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING',
+                me.id, target.id, now());
+        } else {
+            await db.run('DELETE FROM follows WHERE follower_id = ? AND followee_id = ?', me.id, target.id);
+        }
+        const {n} = await db.get(`SELECT COUNT(*) AS n FROM follows f JOIN users x ON x.id = f.follower_id
+            WHERE f.followee_id = ? AND x.banned = 0`, target.id);
+        return {relationship: await relationship(me.id, target.id), followers: n};
+    };
+    route('POST', '/users/:username/follow', ctx => setFollow(ctx, true));
+    route('DELETE', '/users/:username/follow', ctx => setFollow(ctx, false));
+    const userList = sql => async ctx => {
+        const u = await getUserByName(ctx.params.username);
+        const rows = await db.all(`${sql} AND x.banned = 0 ORDER BY f.created_at DESC LIMIT ? OFFSET ?`,
+            u.id, limitN(ctx), page(ctx) * limitN(ctx));
+        return {users: rows.map(userOut)};
+    };
+    route('GET', '/users/:username/followers', userList(
+        'SELECT x.*, f.created_at AS f_created FROM follows f JOIN users x ON x.id = f.follower_id WHERE f.followee_id = ?'));
+    route('GET', '/users/:username/following', userList(
+        'SELECT x.*, f.created_at AS f_created FROM follows f JOIN users x ON x.id = f.followee_id WHERE f.follower_id = ?'));
+    // Friends: newest friendship first (whichever follow completed the pair).
+    route('GET', '/users/:username/friends', userList(`SELECT x.* FROM follows a
+        JOIN follows f ON f.follower_id = a.followee_id AND f.followee_id = a.follower_id
+        JOIN users x ON x.id = a.followee_id WHERE a.follower_id = ?`));
     route('GET', '/users/:username/avatar', async ctx => {
         const u = await getUserByName(ctx.params.username);
         if (!u.has_avatar) throw new HttpError(404, 'No avatar.');
@@ -596,12 +650,20 @@ export const createApi = ({db, blobs, apiPrefix = '/kbau-api', admins = [], firs
         const term = (ctx.query.get('q') || '').trim().slice(0, 100);
         if (!term) return {projects: [], users: []};
         const like = `%${likeEscape(term)}%`;
+        // type=users / type=projects: one kind only (paginated). No type: projects plus the first few users.
+        const type = ctx.query.get('type');
+        const findUsers = (limit, offset) => db.all(`SELECT * FROM users WHERE banned = 0
+            AND (username LIKE ? ESCAPE '\\' OR display_name LIKE ? ESCAPE '\\')
+            ORDER BY (lower(username) = lower(?)) DESC, (username LIKE ? ESCAPE '\\') DESC, length(username), username
+            LIMIT ? OFFSET ?`, like, like, term, `${likeEscape(term)}%`, limit, offset);
+        if (type === 'users') {
+            return {projects: [], users: (await findUsers(limitN(ctx), page(ctx) * limitN(ctx))).map(userOut)};
+        }
         const projects = await db.all(`${PROJECT_SELECT} WHERE ${SHARED}
             AND (p.title LIKE ? ESCAPE '\\' OR p.description LIKE ? ESCAPE '\\' OR u.username LIKE ? ESCAPE '\\')
             ORDER BY (p.title LIKE ? ESCAPE '\\') DESC, (p.love_count + p.view_count) DESC LIMIT ? OFFSET ?`,
         like, like, like, like, limitN(ctx), page(ctx) * limitN(ctx));
-        const users = page(ctx) === 0 ? await db.all(`SELECT * FROM users WHERE banned = 0
-            AND (username LIKE ? ESCAPE '\\' OR display_name LIKE ? ESCAPE '\\') ORDER BY username LIMIT 12`, like, like) : [];
+        const users = page(ctx) === 0 && type !== 'projects' ? await findUsers(12, 0) : [];
         return {projects: projects.map(projectOut), users: users.map(userOut)};
     });
     route('GET', '/stats', () => db.get(`SELECT (SELECT COUNT(*) FROM users) AS users,
@@ -774,6 +836,16 @@ export const createApi = ({db, blobs, apiPrefix = '/kbau-api', admins = [], firs
         await db.run('UPDATE users SET role = ? WHERE id = ?', role, (await getUserByName(ctx.params.username)).id);
         return {ok: true};
     });
+    // Verified tick: admins only, so it keeps meaning something.
+    const setVerified = on => async ctx => {
+        const u = requireUser(ctx);
+        if (u.role !== 'admin') throw new HttpError(403, 'Admins only.');
+        const target = await getUserByName(ctx.params.username);
+        await db.run('UPDATE users SET verified = ? WHERE id = ?', on ? 1 : 0, target.id);
+        return {user: userOut({...target, verified: on ? 1 : 0})};
+    };
+    route('POST', '/admin/users/:username/verify', setVerified(true));
+    route('POST', '/admin/users/:username/unverify', setVerified(false));
 
     // ---------- request handling ----------
     const authenticate = async request => {

@@ -14,13 +14,14 @@ Last updated: 2026-11-16. Read this first when continuing development.
 | Area | Status | How it was verified |
 |---|---|---|
 | Editor based on TurboWarp (compiler, addons, custom extensions, sb3 load/save) | ✅ | Built by CI from pinned TurboWarp commit `7738389a`; opened and used in a browser. |
-| KbauBlocks identity: name, logo, dark grey default theme, solid black top bar, white accent (Mint still selectable) | ✅ | White accent: patch applies; check the built editor after the CI build. |
+| KbauBlocks identity: name, logo, dark grey default theme, solid black top bar, white accent (Mint still selectable) | ✅ | Checked in the live editor (accent-filled buttons show black text/icons). |
 | Save to KbauBlocks (create → version 2 on resave → remix as another user with attribution) | ✅ | Browser end-to-end against local server. |
 | `?kbau_project=<id>` loading (incl. unshared projects for owners) | ✅ | Embedded player on project page renders the project. |
 | Unified extension catalog (TurboWarp 105 + PenguinMod 73 + custom URL) | ✅ | Loaded both lists; Box2D opened in editor with its category. |
-| Backend on Cloudflare (D1, R2, Durable Objects) and Node from one shared core | ✅ | Same 11 tests pass against Node and a local Worker; production deploy answers health and login checks. |
-| Backend: accounts, profiles, avatars, projects, versions, share/unshare, loves, favorites, views, remixes, comments+replies, explore (trending/popular/recent), search, collections, reports, moderation, roles, cloud variables | ✅ | `server/test/api.test.js`: 11 end-to-end tests, all passing. |
+| Backend on Cloudflare (D1, R2, Durable Objects) and Node from one shared core | ✅ | Same test suite passes against Node and a local Worker; production deploy answers health and login checks. |
+| Backend: accounts, profiles, avatars, projects, versions, share/unshare, loves, favorites, views, remixes, comments+replies, explore (trending/popular/recent), search, collections, reports, moderation, roles, cloud variables, follows/friends, verified tick, typed search | ✅ | `server/test/api.test.js`: 12 end-to-end tests, all passing. |
 | Website pages: home, explore/search, project, profile, My Stuff, collection, sign in/join, settings (profile/account/appearance/server), moderation, extensions | ✅ | Each page loaded against the local server with no JS errors; core actions exercised. |
+| Follow / friends (mutual follows), verified tick (admin-granted; automatic for staff), search dropdown (exact user, Search users, Search projects) | ✅ | API tests plus browser check on a local server: follow back → friends, Friends tab, tick, dropdown keyboard navigation. |
 | Static-hosting fallback (no server) | ✅ | Served with a plain static server: honest "server not connected" notice, editor still works. |
 
 ## Not done / not verified (next steps, in priority order)

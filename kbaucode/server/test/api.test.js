@@ -214,6 +214,56 @@ test('collections', async () => {
     assert.equal(r.body.projects[0].id, projectId);
 });
 
+test('follows, friends and the verified tick', async () => {
+    const carol = (await call('POST', '/auth/register', {json: {username: 'carol', password: 'password789'}})).body.token;
+    assert.equal((await call('POST', '/users/bob/follow')).status, 401, 'must be signed in');
+    assert.equal((await call('POST', '/users/bob/follow', {token: bob})).status, 400, 'cannot follow yourself');
+    assert.equal((await call('POST', '/users/nobody-here/follow', {token: bob})).status, 404);
+    // One-way follow: following, not friends yet.
+    let r = await call('POST', '/users/carol/follow', {token: bob});
+    assert.deepEqual(r.body.relationship, {following: true, followedBy: false, friends: false});
+    assert.equal(r.body.followers, 1);
+    r = await call('POST', '/users/carol/follow', {token: bob});
+    assert.equal(r.body.followers, 1, 'following twice is a no-op');
+    r = await call('GET', '/users/bob', {token: carol});
+    assert.deepEqual(r.body.relationship, {following: false, followedBy: true, friends: false});
+    // Follow back: friends.
+    r = await call('POST', '/users/bob/follow', {token: carol});
+    assert.equal(r.body.relationship.friends, true);
+    await call('POST', '/users/alice/follow', {token: bob});
+    r = await call('GET', '/users/bob');
+    assert.equal(r.body.relationship, undefined, 'no relationship for anonymous viewers');
+    assert.equal(r.body.stats.followers, 1);
+    assert.equal(r.body.stats.following, 2);
+    assert.equal(r.body.stats.friends, 1);
+    assert.deepEqual((await call('GET', '/users/bob/following')).body.users.map(u => u.username), ['alice', 'carol']);
+    assert.deepEqual((await call('GET', '/users/bob/followers')).body.users.map(u => u.username), ['carol']);
+    assert.deepEqual((await call('GET', '/users/bob/friends')).body.users.map(u => u.username), ['carol']);
+    assert.deepEqual((await call('GET', '/users/carol/friends')).body.users.map(u => u.username), ['bob']);
+    // Unfollow ends the friendship.
+    r = await call('DELETE', '/users/bob/follow', {token: carol});
+    assert.deepEqual(r.body.relationship, {following: false, followedBy: true, friends: false});
+    assert.equal((await call('GET', '/users/bob/friends')).body.users.length, 0);
+
+    // Verified: staff automatically, others only when an admin grants it.
+    assert.equal((await call('GET', '/users/alice')).body.user.verified, true, 'admins are verified');
+    assert.equal((await call('GET', '/users/carol')).body.user.verified, false);
+    assert.equal((await call('POST', '/admin/users/carol/verify', {token: bob})).status, 403);
+    r = await call('POST', '/admin/users/carol/verify', {token: alice});
+    assert.equal(r.body.user.verified, true);
+    assert.equal((await call('GET', '/users/carol')).body.user.verified, true);
+    assert.equal((await call('GET', '/users/bob/following')).body.users.find(u => u.username === 'carol').verified, true);
+    await call('POST', '/admin/users/carol/unverify', {token: alice});
+    assert.equal((await call('GET', '/users/carol')).body.user.verified, false);
+
+    // Search by type: an exact username comes first; projects-only search returns no users.
+    r = await call('GET', '/search?q=BOB&type=users&limit=1');
+    assert.equal(r.body.users[0].username, 'bob');
+    assert.equal(r.body.projects.length, 0);
+    r = await call('GET', '/search?q=bob&type=projects');
+    assert.equal(r.body.users.length, 0);
+});
+
 test('reports and moderation', async () => {
     const c = await call('POST', `/projects/${projectId}/comments`, {token: bob, json: {content: 'mean comment'}});
     let r = await call('POST', '/reports', {token: alice, json: {targetType: 'comment', targetId: c.body.comment.id, reason: 'rude'}});
