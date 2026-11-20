@@ -190,9 +190,35 @@ import {KbauError, getKbauProjectInfo, saveToKbau, shareToKbau, siteUrl} from '.
     // Know whether a project opened from KbauBlocks is already shared (Share button says "Shared").
     ["        document.addEventListener('keydown', this.handleKeyPress);\n    }\n", `        document.addEventListener('keydown', this.handleKeyPress);
         getKbauProjectInfo().then(info => {
-            if (info && info.canEdit) this.setState({kbauShared: info.shared});
+            if (info) this.setState({kbauCanEdit: info.canEdit, kbauShared: info.canEdit && info.shared});
         });
     }
+`],
+    // "See Project Page": for a project on KbauBlocks, open its KbauBlocks page (player, description, notes,
+    // comments, remixes), saving your changes first if it's yours. Otherwise keep TurboWarp's player mode.
+    [`    handleClickSeeCommunity (waitForUpdate) {
+`, `    handleClickSeeCommunity (waitForUpdate) {
+        const kbauId = new URLSearchParams(window.location.search).get('kbau_project');
+        if (kbauId) {
+            const pageUrl = siteUrl(\`project.html?id=\${encodeURIComponent(kbauId)}\`);
+            const tab = window.open('', '_blank');
+            const go = url => {
+                if (tab) tab.location.href = url;
+                else window.location.href = url;
+            };
+            if (!(this.state && this.state.kbauCanEdit)) {
+                go(pageUrl);
+                return;
+            }
+            saveToKbau(this.props.vm, this.props.projectTitle)
+                .then(result => go(result.url))
+                .catch(e => {
+                    if (tab) tab.close();
+                    // eslint-disable-next-line no-alert
+                    alert(\`Could not save to KbauBlocks: \${e.message}\`);
+                });
+            return;
+        }
 `],
     ['    handleClickSave () {\n', `    async handleClickKbauShare () {
         if (this.state && this.state.kbauSharing) return;
