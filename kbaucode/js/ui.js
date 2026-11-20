@@ -70,11 +70,15 @@ export const avatarEl = (user, size = '') => {
         apiUrl(user.avatarUrl).then(u => {
             img.src = u;
         });
+        // If the uploaded picture can't be loaded, fall back to the default one.
+        img.addEventListener('error', () => {
+            if (img.src !== DEFAULT_AVATAR) img.src = DEFAULT_AVATAR;
+        });
         return img;
     }
-    const name = (user && (user.displayName || user.username)) || '?';
-    return h('span', {class: `avatar ${size}`, style: `background:${(user && user.profileColor) || '#ffffff'}`}, name[0].toUpperCase());
+    return h('img', {class: `avatar ${size}`, src: DEFAULT_AVATAR, alt: ''});
 };
+const DEFAULT_AVATAR = new URL('default-avatar.png', siteRoot).href;
 
 const PLACEHOLDER = new URL('logo.png', siteRoot).href;
 export const projectCard = project => {
