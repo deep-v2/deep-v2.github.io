@@ -292,13 +292,25 @@ function renderComments (box, project, user, isOwner, isMod) {
     const commentEl = (c, top) => {
         const replyBox = h('div');
         const canDelete = user && (user.username === c.author.username || isOwner || isMod);
-        const el = h('div', {class: 'comment'}, avatarEl(c.author, 'sm'),
+        // The project owner (or a moderator) can pin one top-level comment; it is listed first.
+        const canPin = top && (isOwner || isMod) && !c.hidden;
+        const el = h('div', {class: `comment ${c.pinned ? 'pinned' : ''}`}, avatarEl(c.author, 'sm'),
             h('div', {class: 'body'},
+                c.pinned ? h('div', {class: 'pinned-label small'}, '📌 Pinned by the creator') : null,
                 h('div', {class: 'head'}, h('a', {href: link('user.html', {u: c.author.username})}, c.author.displayName), verifiedTick(c.author),
                     h('span', {class: 'muted'}, timeAgo(c.createdAt))),
                 h('div', {class: 'text'}, c.hidden ? h('em', {class: 'muted'}, 'This comment was removed by a moderator.') : c.content),
                 h('div', {class: 'tools'},
                     user && top ? h('button', {onclick: () => replyBox.replaceChildren(composer(c.id, load))}, 'Reply') : null,
+                    canPin ? h('button', {onclick: async () => {
+                        try {
+                            await api.request(c.pinned ? 'DELETE' : 'POST', `/comments/${c.id}/pin`);
+                            toast(c.pinned ? 'Unpinned' : 'Pinned to the top');
+                            load();
+                        } catch (e) {
+                            toast(e.message);
+                        }
+                    }}, c.pinned ? 'Unpin' : 'Pin') : null,
                     canDelete ? h('button', {onclick: async () => {
                         try {
                             await api.del(`/comments/${c.id}`);

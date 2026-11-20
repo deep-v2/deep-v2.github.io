@@ -6,6 +6,7 @@
 import {
     SESSION_TTL_MS, USERNAME_RE, hashPassword, hashToken, newToken, sha256Hex, validatePassword, verifyPassword
 } from './auth.js';
+import {BUILT_IN_WORD_COUNT, createFilter} from './filter.js';
 
 export class HttpError extends Error {
     constructor (status, message) {
@@ -132,6 +133,7 @@ export const createApi = ({db, blobs, apiPrefix = '/kbau-api', admins = [], firs
         projectId: String(c.project_id),
         parentId: c.parent_id,
         content: c.hidden ? '' : c.content,
+        pinned: !!c.pinned,
         hidden: !!c.hidden,
         author: {
             username: c.a_username,
@@ -194,6 +196,48 @@ export const createApi = ({db, blobs, apiPrefix = '/kbau-api', admins = [], firs
         if (!u) throw new HttpError(404, 'User not found.');
         return u;
     };
+    // ---------- moderation helpers: activity log, word filter, IP bans ----------
+    /** Record what happened, by whom, to what (shown on the admin page). */
+    const log = (ctx, action, {targetType = '', targetId = '', targetName = '', details = '', actor} = {}) => {
+        const who = actor || (ctx && ctx.user);
+        return db.run(`INSERT INTO activity_log (created_at, action, actor_id, actor_name, target_type, target_id, target_name, details, ip)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, now(), action, who ? who.id : null, who ? who.username : '',
+        targetType, String(targetId), String(targetName), String(details).slice(0, 1000), (ctx && ctx.ip) || '');
+    };
+
+    const filter = createFilter();
+    let wordsLoadedAt = 0;
+    const loadCustomWords = async force => {
+        if (!force && now() - wordsLoadedAt < 60_000) return;
+        filter.setCustom((await db.all('SELECT word FROM blocked_words')).map(r => r.word));
+        wordsLoadedAt = now();
+    };
+    /**
+     * Reject text containing blocked words. fields: [[value, 'label', {username}], ...]; undefined values are skipped.
+     */
+    const checkText = async (ctx, fields) => {
+        await loadCustomWords();
+        for (const [value, label, opts] of fields) {
+            if (value === undefined || value === null || value === '') continue;
+            const hit = filter.check(value, opts);
+            if (hit) {
+                await log(ctx, 'filter.blocked', {targetType: 'text', targetName: label, details: `${label} contained “${hit}”`});
+                throw new HttpError(400, `Your ${label} contains a word that isn't allowed on KbauBlocks. Please change it.`);
+            }
+        }
+    };
+
+    let ipBans = null;
+    let ipBansLoadedAt = 0;
+    const loadIpBans = async force => {
+        if (!force && ipBans && now() - ipBansLoadedAt < 60_000) return ipBans;
+        ipBans = (await db.all('SELECT pattern FROM ip_bans')).map(r => r.pattern.toLowerCase());
+        ipBansLoadedAt = now();
+        return ipBans;
+    };
+    const ipMatches = (ip, pattern) => (pattern.endsWith('*') ? ip.startsWith(pattern.slice(0, -1)) : ip === pattern);
+    const isIpBanned = async ip => !!ip && (await loadIpBans()).some(p => ipMatches(ip.toLowerCase(), p));
+
     const page = ctx => Math.max(0, Math.min(1000, parseInt(ctx.query.get('page') || '0', 10) || 0));
     const limitN = ctx => Math.max(1, Math.min(60, parseInt(ctx.query.get('limit') || String(PAGE_SIZE), 10) || PAGE_SIZE));
 
@@ -265,19 +309,25 @@ export const createApi = ({db, blobs, apiPrefix = '/kbau-api', admins = [], firs
         }
         if (!validatePassword(password)) throw new HttpError(400, 'Passwords must be at least 8 characters.');
         clampText(email, 200, 'email');
+        await checkText(ctx, [[username, 'username', {username: true}]]);
         if (await db.get('SELECT 1 AS x FROM users WHERE username = ?', username)) throw new HttpError(409, 'That username is taken.');
         const hash = await hashPassword(password);
         const isFirst = (await db.get('SELECT COUNT(*) AS n FROM users')).n === 0;
         const role = (isFirst && firstUserIsAdmin) || adminSet.has(username.toLowerCase()) ? 'admin' : 'user';
         let r;
         try {
-            r = await db.run(`INSERT INTO users (username, display_name, email, password_hash, role, profile_color, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)`, username, username, email || null, hash, role, DEFAULT_PROFILE_COLOR, now());
+            r = await db.run(`INSERT INTO users (username, display_name, email, password_hash, role, profile_color, created_at,
+                signup_ip, last_ip, last_login_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            username, username, email || null, hash, role, DEFAULT_PROFILE_COLOR, now(), ctx.ip || '', ctx.ip || '', now());
         } catch (e) {
             if (/UNIQUE/i.test(String(e.message))) throw new HttpError(409, 'That username is taken.');
             throw e;
         }
         const user = await db.get('SELECT * FROM users WHERE id = ?', r.lastId);
+        const sameIp = ctx.ip ? (await db.get('SELECT COUNT(*) AS n FROM users WHERE id != ? AND (signup_ip = ? OR last_ip = ?)',
+            user.id, ctx.ip, ctx.ip)).n : 0;
+        await log(ctx, 'account.create', {actor: user, targetType: 'user', targetId: user.id, targetName: user.username,
+            details: sameIp ? `${sameIp} other account(s) used this IP` : ''});
         return {token: await issueSession(user), user: userOut(user)};
     });
     route('POST', '/auth/login', async ctx => {
@@ -293,11 +343,15 @@ export const createApi = ({db, blobs, apiPrefix = '/kbau-api', admins = [], firs
         if (!(await verifyPassword(String(password || ''), user.password_hash))) {
             throw new HttpError(401, 'Incorrect username or password.');
         }
-        if (user.banned) throw new HttpError(403, 'Your account has been suspended.');
+        if (user.banned) {
+            throw new HttpError(403, `Your account has been suspended.${user.ban_reason ? ` Reason: ${user.ban_reason}` : ''}`);
+        }
         if (adminSet.has(user.username.toLowerCase()) && user.role !== 'admin') {
             await db.run("UPDATE users SET role = 'admin' WHERE id = ?", user.id);
             user.role = 'admin';
         }
+        await db.run('UPDATE users SET last_ip = ?, last_login_at = ? WHERE id = ?', ctx.ip || '', now(), user.id);
+        await log(ctx, 'account.login', {actor: user, targetType: 'user', targetId: user.id, targetName: user.username});
         return {token: await issueSession(user), user: userOut(user)};
     });
     route('POST', '/auth/logout', async ctx => {
@@ -396,6 +450,7 @@ export const createApi = ({db, blobs, apiPrefix = '/kbau-api', admins = [], firs
         const workingOn = clampText(body.workingOn, 1000, 'workingOn');
         const color = clampText(body.profileColor, 7, 'profileColor');
         if (color !== undefined && !/^#[0-9a-fA-F]{6}$/.test(color)) throw new HttpError(400, 'profileColor must look like #12abef');
+        await checkText(ctx, [[displayName, 'display name'], [bio, 'bio'], [workingOn, "“What I'm working on” text"]]);
         await db.run(`UPDATE users SET display_name = COALESCE(?, display_name), bio = COALESCE(?, bio),
             working_on = COALESCE(?, working_on), profile_color = COALESCE(?, profile_color) WHERE id = ?`,
         displayName ?? null, bio ?? null, workingOn ?? null, color ?? null, user.id);
@@ -434,6 +489,7 @@ export const createApi = ({db, blobs, apiPrefix = '/kbau-api', admins = [], firs
         const thumb = await file('thumbnail', MAX_IMAGE);
         const thumbType = thumb && imageType(thumb);
         const title = clampText(form.get('title') || 'Untitled', 100, 'title').trim() || 'Untitled';
+        await checkText(ctx, [[title, 'project title']]);
         let remixOf = null;
         const remixId = form.get('remixOf');
         if (remixId) {
@@ -460,6 +516,7 @@ export const createApi = ({db, blobs, apiPrefix = '/kbau-api', admins = [], firs
         const thumb = await file('thumbnail', MAX_IMAGE);
         const thumbType = thumb && imageType(thumb);
         const title = clampText(form.get('title') || undefined, 100, 'title');
+        await checkText(ctx, [[title, 'project title']]);
         // Claim the next version number atomically, then store the file.
         const claimed = await db.get(`UPDATE projects SET current_version = current_version + 1, updated_at = ?,
             title = COALESCE(?, title), has_thumbnail = CASE WHEN ? THEN has_thumbnail + 1 ELSE has_thumbnail END
@@ -476,6 +533,7 @@ export const createApi = ({db, blobs, apiPrefix = '/kbau-api', admins = [], firs
         const title = clampText(body.title, 100, 'title');
         const description = clampText(body.description, 5000, 'description');
         const notes = clampText(body.notes, 5000, 'notes');
+        await checkText(ctx, [[title, 'project title'], [description, 'description'], [notes, 'notes']]);
         await db.run(`UPDATE projects SET title = COALESCE(?, title), description = COALESCE(?, description),
             notes = COALESCE(?, notes), updated_at = ? WHERE id = ?`,
         title !== undefined ? (title.trim() || 'Untitled') : null, description ?? null, notes ?? null, now(), p.id);
@@ -499,6 +557,9 @@ export const createApi = ({db, blobs, apiPrefix = '/kbau-api', admins = [], firs
         if (p.owner_id !== user.id && !isMod(user)) throw new HttpError(403, 'You do not own this project.');
         await db.run('UPDATE projects SET deleted = 1, shared = 0 WHERE id = ?', p.id);
         if (p.remix_of) await recountRemixes(p.remix_of);
+        if (p.owner_id !== user.id) {
+            await log(ctx, 'project.delete', {targetType: 'project', targetId: p.id, targetName: `“${p.title}” by ${p.o_username}`});
+        }
         return {ok: true};
     });
     route('GET', '/projects/:id/sb3', async ctx => {
@@ -576,8 +637,9 @@ export const createApi = ({db, blobs, apiPrefix = '/kbau-api', admins = [], firs
     // Comments
     route('GET', '/projects/:id/comments', async ctx => {
         const p = await getProject(ctx.params.id, ctx.user);
+        // The pinned comment (if any) always comes first.
         const top = await db.all(`${COMMENT_SELECT} WHERE c.project_id = ? AND c.parent_id IS NULL
-            ORDER BY c.created_at DESC LIMIT ? OFFSET ?`, p.id, limitN(ctx), page(ctx) * limitN(ctx));
+            ORDER BY c.pinned DESC, c.created_at DESC LIMIT ? OFFSET ?`, p.id, limitN(ctx), page(ctx) * limitN(ctx));
         let replies = [];
         if (top.length) {
             replies = await db.all(`${COMMENT_SELECT} WHERE c.parent_id IN (${top.map(() => '?').join(',')}) ORDER BY c.created_at ASC`,
@@ -595,6 +657,7 @@ export const createApi = ({db, blobs, apiPrefix = '/kbau-api', admins = [], firs
         const {content, parentId} = await ctx.json();
         const text = clampText(content, 500, 'content');
         if (!text || !text.trim()) throw new HttpError(400, 'Write something first.');
+        await checkText(ctx, [[text, 'comment']]);
         let parent = null;
         if (parentId) {
             parent = await db.get('SELECT * FROM comments WHERE id = ? AND project_id = ?', Number(parentId), p.id);
@@ -615,8 +678,26 @@ export const createApi = ({db, blobs, apiPrefix = '/kbau-api', admins = [], firs
         await db.run('DELETE FROM comments WHERE parent_id = ?', c.id);
         await db.run('DELETE FROM comments WHERE id = ?', c.id);
         await recountComments(c.project_id);
+        if (c.author_id !== user.id) {
+            await log(ctx, 'comment.delete', {targetType: 'comment', targetId: c.id, targetName: `project ${c.project_id}`,
+                details: String(c.content).slice(0, 200)});
+        }
         return {ok: true};
     });
+    // Pin one top-level comment to the top of a project (the project's owner, or a moderator).
+    const setPinned = on => async ctx => {
+        const user = requireUser(ctx);
+        const c = await db.get('SELECT c.*, p.owner_id FROM comments c JOIN projects p ON p.id = c.project_id WHERE c.id = ?', Number(ctx.params.id));
+        if (!c) throw new HttpError(404, 'Comment not found.');
+        if (c.owner_id !== user.id && !isMod(user)) throw new HttpError(403, 'Only the project owner can pin comments.');
+        if (on && c.parent_id) throw new HttpError(400, 'Only top-level comments can be pinned.');
+        if (on && c.hidden) throw new HttpError(400, 'Removed comments cannot be pinned.');
+        if (on) await db.run('UPDATE comments SET pinned = 0 WHERE project_id = ? AND pinned = 1', c.project_id);
+        await db.run('UPDATE comments SET pinned = ? WHERE id = ?', on ? 1 : 0, c.id);
+        return {ok: true, pinned: on};
+    };
+    route('POST', '/comments/:id/pin', setPinned(true));
+    route('DELETE', '/comments/:id/pin', setPinned(false));
 
     // Discovery
     route('GET', '/explore', async ctx => {
@@ -682,6 +763,7 @@ export const createApi = ({db, blobs, apiPrefix = '/kbau-api', admins = [], firs
         const title = clampText(body.title, 100, 'title');
         if (!title || !title.trim()) throw new HttpError(400, 'Give your collection a title.');
         const description = clampText(body.description, 2000, 'description') || '';
+        await checkText(ctx, [[title, 'collection title'], [description, 'collection description']]);
         const r = await db.run('INSERT INTO collections (owner_id, title, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
             user.id, title.trim(), description, now(), now());
         ctx.status = 201;
@@ -700,6 +782,7 @@ export const createApi = ({db, blobs, apiPrefix = '/kbau-api', admins = [], firs
         const body = await ctx.json();
         const title = clampText(body.title, 100, 'title');
         const description = clampText(body.description, 2000, 'description');
+        await checkText(ctx, [[title, 'collection title'], [description, 'collection description']]);
         await db.run('UPDATE collections SET title = COALESCE(?, title), description = COALESCE(?, description), updated_at = ? WHERE id = ?',
             title && title.trim() ? title.trim() : null, description ?? null, now(), c.id);
         return {collection: collectionOut(await getCollection(c.id))};
@@ -740,6 +823,7 @@ export const createApi = ({db, blobs, apiPrefix = '/kbau-api', admins = [], firs
         if (!['project', 'comment', 'user'].includes(targetType)) throw new HttpError(400, 'Unknown report type.');
         const text = clampText(reason, 1000, 'reason');
         if (!text || !text.trim()) throw new HttpError(400, 'Tell us what is wrong.');
+        await checkText(ctx, [[text, 'report']]);
         if (targetType === 'project') await getProject(targetId, user);
         if (targetType === 'comment' && !(await db.get('SELECT 1 AS x FROM comments WHERE id = ?', Number(targetId)))) {
             throw new HttpError(404, 'Comment not found.');
@@ -774,12 +858,37 @@ export const createApi = ({db, blobs, apiPrefix = '/kbau-api', admins = [], firs
         }
         return {reports};
     });
-    const banUser = async (userId, mod) => {
+    const isAdmin = u => u && u.role === 'admin';
+    const requireAdmin = ctx => {
+        const u = requireUser(ctx);
+        if (!isAdmin(u)) throw new HttpError(403, 'Admins only.');
+        return u;
+    };
+    const IP_PATTERN_RE = /^[0-9a-f.:]{1,45}\*?$/i;
+    const addIpBan = async (ctx, pattern, reason) => {
+        const p = String(pattern || '').trim().toLowerCase();
+        if (!p || !IP_PATTERN_RE.test(p) || p === '*') {
+            throw new HttpError(400, 'Use an IP address (203.0.113.7) or a prefix ending in * (203.0.113.*).');
+        }
+        if (ctx.ip && ipMatches(ctx.ip.toLowerCase(), p)) throw new HttpError(400, 'That would ban your own connection.');
+        await db.run('INSERT INTO ip_bans (pattern, reason, created_by, created_at) VALUES (?, ?, ?, ?) ON CONFLICT(pattern) DO NOTHING',
+            p, clampText(reason, 500, 'reason') || '', ctx.user.username, now());
+        await loadIpBans(true);
+        await log(ctx, 'ip.ban', {targetType: 'ip', targetId: p, targetName: p, details: reason || ''});
+        return p;
+    };
+    const banUser = async (ctx, userId, reason, {banIp = false} = {}) => {
+        const mod = ctx.user;
         const target = await db.get('SELECT * FROM users WHERE id = ?', userId);
         if (!target) throw new HttpError(404, 'User not found.');
+        if (target.id === mod.id) throw new HttpError(400, 'You cannot ban yourself.');
         if (target.role === 'admin' || (target.role === 'moderator' && mod.role !== 'admin')) throw new HttpError(403, 'You cannot ban this user.');
-        await db.run('UPDATE users SET banned = 1 WHERE id = ?', userId);
+        const why = (clampText(reason, 500, 'reason') || '').trim();
+        if (banIp && !isAdmin(mod)) throw new HttpError(403, 'Only admins can ban IP addresses.');
+        await db.run('UPDATE users SET banned = 1, ban_reason = ?, banned_at = ?, banned_by = ? WHERE id = ?', why, now(), mod.username, userId);
         await db.run('DELETE FROM sessions WHERE user_id = ?', userId);
+        await log(ctx, 'user.ban', {targetType: 'user', targetId: target.id, targetName: target.username, details: why});
+        if (banIp && target.last_ip) await addIpBan(ctx, target.last_ip, `Ban of ${target.username}${why ? `: ${why}` : ''}`);
     };
     route('POST', '/admin/reports/:id/resolve', async ctx => {
         const mod = requireMod(ctx);
@@ -787,6 +896,7 @@ export const createApi = ({db, blobs, apiPrefix = '/kbau-api', admins = [], firs
         if (!r) throw new HttpError(404, 'Report not found.');
         const {action, note} = await ctx.json();
         if (!['dismiss', 'hide', 'ban'].includes(action)) throw new HttpError(400, 'action must be dismiss, hide or ban');
+        const noteText = clampText(note, 1000, 'note') || '';
         if (action === 'hide') {
             if (r.target_type === 'project') await db.run('UPDATE projects SET hidden = 1 WHERE id = ?', Number(r.target_id));
             else if (r.target_type === 'comment') await db.run('UPDATE comments SET hidden = 1 WHERE id = ?', Number(r.target_id));
@@ -797,55 +907,197 @@ export const createApi = ({db, blobs, apiPrefix = '/kbau-api', admins = [], firs
             if (r.target_type === 'user') row = await db.get('SELECT id AS uid FROM users WHERE username = ?', r.target_id);
             if (r.target_type === 'project') row = await db.get('SELECT owner_id AS uid FROM projects WHERE id = ?', Number(r.target_id));
             if (r.target_type === 'comment') row = await db.get('SELECT author_id AS uid FROM comments WHERE id = ?', Number(r.target_id));
-            if (row) await banUser(row.uid, mod);
+            if (row) await banUser(ctx, row.uid, noteText || `Report #${r.id}: ${r.reason}`);
         }
         await db.run('UPDATE reports SET status = ?, resolved_by = ?, resolution_note = ?, resolved_at = ? WHERE id = ?',
-            action === 'dismiss' ? 'dismissed' : 'resolved', mod.id, clampText(note, 1000, 'note') || '', now(), r.id);
+            action === 'dismiss' ? 'dismissed' : 'resolved', mod.id, noteText, now(), r.id);
+        await log(ctx, `report.${action}`, {targetType: r.target_type, targetId: r.target_id, targetName: `report #${r.id}`, details: noteText});
         return {ok: true};
     });
-    route('POST', '/admin/projects/:id/hide', async ctx => {
+    const setHidden = (table, on) => async ctx => {
         requireMod(ctx);
-        await db.run('UPDATE projects SET hidden = 1 WHERE id = ?', Number(ctx.params.id));
+        const id = Number(ctx.params.id);
+        await db.run(`UPDATE ${table} SET hidden = ? WHERE id = ?`, on ? 1 : 0, id);
+        await log(ctx, `${table === 'projects' ? 'project' : 'comment'}.${on ? 'hide' : 'unhide'}`, {
+            targetType: table === 'projects' ? 'project' : 'comment', targetId: id, targetName: `${table === 'projects' ? 'project' : 'comment'} ${id}`
+        });
         return {ok: true};
-    });
-    route('POST', '/admin/projects/:id/unhide', async ctx => {
-        requireMod(ctx);
-        await db.run('UPDATE projects SET hidden = 0 WHERE id = ?', Number(ctx.params.id));
-        return {ok: true};
-    });
-    route('POST', '/admin/comments/:id/hide', async ctx => {
-        requireMod(ctx);
-        await db.run('UPDATE comments SET hidden = 1 WHERE id = ?', Number(ctx.params.id));
-        return {ok: true};
-    });
+    };
+    route('POST', '/admin/projects/:id/hide', setHidden('projects', true));
+    route('POST', '/admin/projects/:id/unhide', setHidden('projects', false));
+    route('POST', '/admin/comments/:id/hide', setHidden('comments', true));
+    route('POST', '/admin/comments/:id/unhide', setHidden('comments', false));
     route('POST', '/admin/users/:username/ban', async ctx => {
-        const mod = requireMod(ctx);
-        await banUser((await getUserByName(ctx.params.username)).id, mod);
+        requireMod(ctx);
+        const {reason, banIp} = await ctx.json();
+        await banUser(ctx, (await getUserByName(ctx.params.username)).id, reason, {banIp: !!banIp});
         return {ok: true};
     });
     route('POST', '/admin/users/:username/unban', async ctx => {
         requireMod(ctx);
-        await db.run('UPDATE users SET banned = 0 WHERE id = ?', (await getUserByName(ctx.params.username)).id);
+        const target = await getUserByName(ctx.params.username);
+        await db.run("UPDATE users SET banned = 0, ban_reason = '', banned_at = NULL, banned_by = '' WHERE id = ?", target.id);
+        await log(ctx, 'user.unban', {targetType: 'user', targetId: target.id, targetName: target.username});
         return {ok: true};
     });
     route('POST', '/admin/users/:username/role', async ctx => {
-        const u = requireUser(ctx);
-        if (u.role !== 'admin') throw new HttpError(403, 'Admins only.');
+        requireAdmin(ctx);
         const {role} = await ctx.json();
         if (!['user', 'moderator', 'admin'].includes(role)) throw new HttpError(400, 'Invalid role.');
-        await db.run('UPDATE users SET role = ? WHERE id = ?', role, (await getUserByName(ctx.params.username)).id);
+        const target = await getUserByName(ctx.params.username);
+        await db.run('UPDATE users SET role = ? WHERE id = ?', role, target.id);
+        await log(ctx, 'user.role', {targetType: 'user', targetId: target.id, targetName: target.username, details: `${target.role} → ${role}`});
         return {ok: true};
     });
     // Verified tick: admins only, so it keeps meaning something.
     const setVerified = on => async ctx => {
-        const u = requireUser(ctx);
-        if (u.role !== 'admin') throw new HttpError(403, 'Admins only.');
+        requireAdmin(ctx);
         const target = await getUserByName(ctx.params.username);
         await db.run('UPDATE users SET verified = ? WHERE id = ?', on ? 1 : 0, target.id);
+        await log(ctx, on ? 'user.verify' : 'user.unverify', {targetType: 'user', targetId: target.id, targetName: target.username});
         return {user: userOut({...target, verified: on ? 1 : 0})};
     };
     route('POST', '/admin/users/:username/verify', setVerified(true));
     route('POST', '/admin/users/:username/unverify', setVerified(false));
+
+    // ---------- admin page data ----------
+    const DAY = 86400_000;
+    route('GET', '/admin/stats', async ctx => {
+        requireMod(ctx);
+        const t = now();
+        return {stats: await db.get(`SELECT
+            (SELECT COUNT(*) FROM users) AS users,
+            (SELECT COUNT(*) FROM users WHERE created_at > ?) AS new_day,
+            (SELECT COUNT(*) FROM users WHERE created_at > ?) AS new_week,
+            (SELECT COUNT(*) FROM users WHERE banned = 1) AS banned,
+            (SELECT COUNT(*) FROM users WHERE last_login_at > ?) AS active_day,
+            (SELECT COUNT(*) FROM reports WHERE status = 'open') AS open_reports,
+            (SELECT COUNT(*) FROM projects p WHERE ${SHARED}) AS shared_projects,
+            (SELECT COUNT(*) FROM comments) AS comments,
+            (SELECT COUNT(*) FROM ip_bans) AS ip_bans,
+            (SELECT COUNT(*) FROM activity_log WHERE action = 'filter.blocked' AND created_at > ?) AS blocked_day`,
+        t - DAY, t - 7 * DAY, t - DAY, t - DAY)};
+    });
+    /** Users for the admin page. filter: all | banned | staff | verified | new. IP addresses only for admins. */
+    route('GET', '/admin/users', async ctx => {
+        const me = requireMod(ctx);
+        const q = (ctx.query.get('q') || '').trim().slice(0, 100);
+        const filterName = ctx.query.get('filter') || 'all';
+        const where = ['1 = 1'];
+        const args = [];
+        if (q) {
+            const like = `%${likeEscape(q)}%`;
+            if (isAdmin(me) && /^[0-9a-f.:]+\*?$/i.test(q) && /[.:]/.test(q)) {
+                // An IP address (or prefix with *): accounts that signed up or last signed in from it.
+                const ipLike = q.endsWith('*') ? `${likeEscape(q.slice(0, -1))}%` : likeEscape(q);
+                where.push("(signup_ip LIKE ? ESCAPE '\\' OR last_ip LIKE ? ESCAPE '\\')");
+                args.push(ipLike, ipLike);
+            } else {
+                where.push("(username LIKE ? ESCAPE '\\' OR display_name LIKE ? ESCAPE '\\' OR ban_reason LIKE ? ESCAPE '\\')");
+                args.push(like, like, like);
+            }
+        }
+        if (filterName === 'banned') where.push('banned = 1');
+        if (filterName === 'staff') where.push("role IN ('admin', 'moderator')");
+        if (filterName === 'verified') where.push('verified = 1');
+        if (filterName === 'new') {
+            where.push('created_at > ?');
+            args.push(now() - 7 * DAY);
+        }
+        const order = filterName === 'banned' ? 'banned_at DESC' : 'created_at DESC';
+        const rows = await db.all(`SELECT u.*,
+            (SELECT COUNT(*) FROM projects p WHERE p.owner_id = u.id AND p.deleted = 0) AS project_count,
+            (SELECT COUNT(*) FROM users o WHERE o.id != u.id AND u.signup_ip != '' AND (o.signup_ip = u.signup_ip OR o.last_ip = u.signup_ip
+                OR (u.last_ip != '' AND (o.signup_ip = u.last_ip OR o.last_ip = u.last_ip)))) AS same_ip
+            FROM users u WHERE ${where.join(' AND ')} ORDER BY ${order} LIMIT ? OFFSET ?`,
+        ...args, limitN(ctx), page(ctx) * limitN(ctx));
+        return {users: rows.map(u => ({
+            ...userOut(u),
+            banReason: u.ban_reason, bannedAt: u.banned_at, bannedBy: u.banned_by, lastLoginAt: u.last_login_at,
+            projectCount: u.project_count, sameIpAccounts: u.same_ip,
+            ...(isAdmin(me) ? {signupIp: u.signup_ip, lastIp: u.last_ip} : {})
+        }))};
+    });
+    /** Activity log: account creations, logins, bans, filter blocks, moderation actions. */
+    route('GET', '/admin/log', async ctx => {
+        const me = requireMod(ctx);
+        const action = (ctx.query.get('action') || '').trim();
+        const q = (ctx.query.get('q') || '').trim().slice(0, 100);
+        const where = ['1 = 1'];
+        const args = [];
+        if (action) {
+            // "account" matches account.create and account.login; "account.create" matches only that.
+            where.push(action.includes('.') ? 'action = ?' : 'action LIKE ?');
+            args.push(action.includes('.') ? action : `${action}.%`);
+        }
+        if (q) {
+            const like = `%${likeEscape(q)}%`;
+            where.push(`(actor_name LIKE ? ESCAPE '\\' OR target_name LIKE ? ESCAPE '\\' OR details LIKE ? ESCAPE '\\'${isAdmin(me) ? " OR ip LIKE ? ESCAPE '\\'" : ''})`);
+            args.push(like, like, like);
+            if (isAdmin(me)) args.push(like);
+        }
+        const rows = await db.all(`SELECT * FROM activity_log WHERE ${where.join(' AND ')} ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?`,
+            ...args, limitN(ctx), page(ctx) * limitN(ctx));
+        return {entries: rows.map(e => ({
+            id: e.id, at: e.created_at, action: e.action, actor: e.actor_name || null, targetType: e.target_type,
+            targetId: e.target_id, target: e.target_name, details: e.details, ...(isAdmin(me) ? {ip: e.ip} : {})
+        }))};
+    });
+    // IP bans (admins only).
+    route('GET', '/admin/ip-bans', async ctx => {
+        requireAdmin(ctx);
+        const rows = await db.all(`SELECT b.*, (SELECT COUNT(*) FROM users u WHERE u.signup_ip = b.pattern OR u.last_ip = b.pattern) AS accounts
+            FROM ip_bans b ORDER BY created_at DESC`);
+        return {bans: rows.map(b => ({id: b.id, pattern: b.pattern, reason: b.reason, createdBy: b.created_by, createdAt: b.created_at, accounts: b.accounts}))};
+    });
+    route('POST', '/admin/ip-bans', async ctx => {
+        requireAdmin(ctx);
+        const {pattern, reason} = await ctx.json();
+        ctx.status = 201;
+        return {pattern: await addIpBan(ctx, pattern, reason)};
+    });
+    route('DELETE', '/admin/ip-bans/:id', async ctx => {
+        requireAdmin(ctx);
+        const b = await db.get('SELECT * FROM ip_bans WHERE id = ?', Number(ctx.params.id));
+        if (!b) throw new HttpError(404, 'Not found.');
+        await db.run('DELETE FROM ip_bans WHERE id = ?', b.id);
+        await loadIpBans(true);
+        await log(ctx, 'ip.unban', {targetType: 'ip', targetId: b.pattern, targetName: b.pattern});
+        return {ok: true};
+    });
+    // Extra blocked words (admins edit; built-in list is in core/filter.js).
+    route('GET', '/admin/words', async ctx => {
+        requireMod(ctx);
+        const rows = await db.all('SELECT * FROM blocked_words ORDER BY word');
+        return {builtIn: BUILT_IN_WORD_COUNT, words: rows.map(w => ({word: w.word, createdBy: w.created_by, createdAt: w.created_at}))};
+    });
+    route('POST', '/admin/words', async ctx => {
+        requireAdmin(ctx);
+        const {word} = await ctx.json();
+        const w = String(word || '').trim().toLowerCase();
+        if (!/^[\p{L}\p{N}' -]{2,40}$/u.test(w)) throw new HttpError(400, 'Words are 2-40 letters.');
+        await db.run('INSERT INTO blocked_words (word, created_by, created_at) VALUES (?, ?, ?) ON CONFLICT(word) DO NOTHING', w, ctx.user.username, now());
+        await loadCustomWords(true);
+        await log(ctx, 'filter.add', {targetType: 'word', targetName: w});
+        ctx.status = 201;
+        return {ok: true};
+    });
+    route('DELETE', '/admin/words/:word', async ctx => {
+        requireAdmin(ctx);
+        const w = String(ctx.params.word).toLowerCase();
+        await db.run('DELETE FROM blocked_words WHERE word = ?', w);
+        await loadCustomWords(true);
+        await log(ctx, 'filter.remove', {targetType: 'word', targetName: w});
+        return {ok: true};
+    });
+    /** Try text against the filter without saving anything (admin page tester). */
+    route('POST', '/admin/words/test', async ctx => {
+        requireMod(ctx);
+        const {text} = await ctx.json();
+        await loadCustomWords();
+        const value = clampText(text, 2000, 'text') || '';
+        return {text: filter.check(value), username: filter.check(value, {username: true})};
+    });
 
     // ---------- request handling ----------
     const authenticate = async request => {
@@ -893,6 +1145,10 @@ export const createApi = ({db, blobs, apiPrefix = '/kbau-api', admins = [], firs
         });
         const size = Number(request.headers.get('content-length') || 0);
         try {
+            // Banned networks can still browse, but cannot sign up, sign in or change anything.
+            if (!['GET', 'HEAD'].includes(request.method) && await isIpBanned(ip)) {
+                throw new HttpError(403, 'Your network has been banned from KbauBlocks.');
+            }
             const {token, user} = await authenticate(request);
             const ctx = {
                 request, params, query: url.searchParams, ip, token, user, status: 200,

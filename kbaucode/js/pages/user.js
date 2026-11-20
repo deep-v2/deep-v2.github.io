@@ -86,9 +86,10 @@ const main = $('#main');
                     }
                 }}, user.verified ? 'Remove tick' : 'Verify') : null,
                 me && !isMe ? h('button', {class: 'btn ghost small', onclick: () => report(user.username)}, 'Report') : null,
-                isMod && !isMe ? h('button', {class: 'btn small danger', onclick: async () => {
+                isMod && !isMe && user.role !== 'admin' ? h('button', {class: 'btn small danger', onclick: async () => {
+                    if (!user.banned) return banDialog(user.username, isAdmin);
                     try {
-                        await api.post(`/admin/users/${encodeURIComponent(user.username)}/${user.banned ? 'unban' : 'ban'}`);
+                        await api.post(`/admin/users/${encodeURIComponent(user.username)}/unban`);
                         location.reload();
                     } catch (e) {
                         toast(e.message);
@@ -145,6 +146,24 @@ const main = $('#main');
     main.append(tabBar, body);
     show('projects');
 })();
+
+// Ban with a reason (shown to the user when they try to sign in); admins can also ban the IP.
+async function banDialog (username, canBanIp) {
+    const reason = h('textarea', {id: 'ban-reason', maxlength: 500, placeholder: 'e.g. Repeated spam in comments'});
+    const ipBox = h('input', {type: 'checkbox', id: 'ban-ip'});
+    const ok = await modal(`Ban @${username}`, [
+        h('label', {for: 'ban-reason'}, 'Reason (the user sees this when they try to sign in)'), reason,
+        canBanIp ? h('label', {class: 'row', style: 'margin-top:12px;gap:8px;font-weight:600'}, ipBox,
+            'Also ban the IP address they last signed in from') : null
+    ], [{label: 'Cancel', value: false, class: 'ghost'}, {label: 'Ban', value: true, class: 'danger'}]);
+    if (!ok) return;
+    try {
+        await api.post(`/admin/users/${encodeURIComponent(username)}/ban`, {reason: reason.value, banIp: ipBox.checked});
+        location.reload();
+    } catch (e) {
+        toast(e.message);
+    }
+}
 
 async function report (username) {
     const reason = h('textarea', {id: 'reason', maxlength: 1000});

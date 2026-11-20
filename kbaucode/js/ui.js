@@ -257,7 +257,7 @@ export const renderHeader = async active => {
                 h('a', {href: link('user.html', {u: user.username})}, 'Profile'),
                 h('a', {href: link('mystuff.html')}, 'My Stuff'),
                 h('a', {href: link('settings.html')}, 'Settings'),
-                (user.role === 'admin' || user.role === 'moderator') ? h('a', {href: link('admin.html')}, 'Moderation') : null,
+                (user.role === 'admin' || user.role === 'moderator') ? h('a', {href: link('admin.html')}, 'Admin') : null,
                 h('button', {onclick: async () => {
                     await signOut();
                     location.reload();

@@ -44,7 +44,7 @@ before(async () => {
     const port = await freePort();
     base = `http://127.0.0.1:${port}/kbau-api`;
     proc = spawn(process.execPath, [path.join(here, '..', 'src', 'server.js')], {
-        env: {...process.env, PORT: String(port), HOST: '127.0.0.1', KBAU_DATA_DIR: dataDir, NODE_NO_WARNINGS: '1'},
+        env: {...process.env, PORT: String(port), HOST: '127.0.0.1', KBAU_DATA_DIR: dataDir, NODE_NO_WARNINGS: '1', KBAU_TRUST_PROXY: '1'},
         stdio: 'pipe'
     });
     for (let i = 0; i < 50; i++) {
@@ -67,9 +67,11 @@ after(async () => {
     fs.rmSync(dataDir, {recursive: true, force: true, maxRetries: 10, retryDelay: 100});
 });
 
-const call = async (method, p, {token, json, form} = {}) => {
+const call = async (method, p, {token, json, form, ip} = {}) => {
     const headers = {};
     if (token) headers.Authorization = `Bearer ${token}`;
+    // The spawned Node server trusts X-Forwarded-For (KBAU_TRUST_PROXY=1), so tests can act from any IP.
+    if (ip) headers['X-Forwarded-For'] = ip;
     let body;
     if (json) {
         headers['Content-Type'] = 'application/json';
@@ -271,6 +273,105 @@ test('follows, friends and the verified tick', async () => {
     assert.equal(r.body.projects.length, 0);
     r = await call('GET', '/search?q=bob&type=projects');
     assert.equal(r.body.users.length, 0);
+});
+
+test('word filter on every kind of text', async () => {
+    const bad = async (method, p, opts) => {
+        const r = await call(method, p, opts);
+        assert.equal(r.status, 400, `${method} ${p} should be blocked`);
+        assert.match(r.body.error, /isn't allowed/);
+    };
+    await bad('POST', '/auth/register', {ip: '203.0.113.11', json: {username: 'xXfuckXx', password: 'password123'}});
+    await bad('POST', '/auth/register', {ip: '203.0.113.12', json: {username: 'sh1tlord', password: 'password123'}});
+    assert.equal((await call('POST', '/auth/register', {ip: '203.0.113.13', json: {username: 'Cassandra', password: 'password123'}})).status, 200,
+        'ordinary names that contain a bad word inside them are fine');
+    await bad('PATCH', '/users/me', {token: bob, json: {bio: 'what the f u c k'}});
+    await bad('PATCH', '/users/me', {token: bob, json: {displayName: 'B1tch'}});
+    assert.equal((await call('PATCH', '/users/me', {token: bob, json: {bio: 'I love classic games and spicy food'}})).status, 200);
+    await bad('PATCH', `/projects/${projectId}`, {token: alice, json: {title: 'shit game'}});
+    await bad('PATCH', `/projects/${projectId}`, {token: alice, json: {notes: 'fuuuuck'}});
+    await bad('POST', `/projects/${projectId}/comments`, {token: bob, json: {content: 'you are a b!tch'}});
+    await bad('POST', '/collections', {token: bob, json: {title: 'ass stuff'}});
+    await bad('POST', '/reports', {token: bob, json: {targetType: 'user', targetId: 'alice', reason: 'fuck you'}});
+    // Admins can add their own words.
+    assert.equal((await call('POST', '/admin/words', {token: bob, json: {word: 'bananarama'}})).status, 403);
+    assert.equal((await call('POST', '/admin/words', {token: alice, json: {word: 'Bananarama'}})).status, 201);
+    await bad('POST', `/projects/${projectId}/comments`, {token: bob, json: {content: 'bananarama forever'}});
+    assert.equal((await call('POST', '/admin/words/test', {token: alice, json: {text: 'bananarama'}})).body.text, 'bananarama');
+    await call('DELETE', '/admin/words/bananarama', {token: alice});
+    assert.equal((await call('POST', `/projects/${projectId}/comments`, {token: bob, json: {content: 'bananarama forever'}})).status, 201);
+    const log = await call('GET', '/admin/log?action=filter.blocked', {token: alice});
+    assert.ok(log.body.entries.length >= 10, 'blocked attempts are logged');
+});
+
+test('pinned comments', async () => {
+    const a = (await call('POST', `/projects/${projectId}/comments`, {token: bob, json: {content: 'first!'}})).body.comment;
+    const b = (await call('POST', `/projects/${projectId}/comments`, {token: bob, json: {content: 'second'}})).body.comment;
+    assert.equal((await call('POST', `/comments/${a.id}/pin`, {token: bob})).status, 403, 'only the project owner pins');
+    assert.equal((await call('POST', `/comments/${a.id}/pin`, {token: alice})).status, 200);
+    let list = (await call('GET', `/projects/${projectId}/comments`)).body.comments;
+    assert.equal(list[0].id, a.id, 'pinned comment comes first');
+    assert.equal(list[0].pinned, true);
+    await call('POST', `/comments/${b.id}/pin`, {token: alice});
+    list = (await call('GET', `/projects/${projectId}/comments`)).body.comments;
+    assert.equal(list[0].id, b.id);
+    assert.equal(list.filter(c => c.pinned).length, 1, 'only one pinned comment per project');
+    await call('DELETE', `/comments/${b.id}/pin`, {token: alice});
+    assert.equal((await call('GET', `/projects/${projectId}/comments`)).body.comments.filter(c => c.pinned).length, 0);
+});
+
+test('bans with reasons, IP bans and the activity log', async () => {
+    const dave = await call('POST', '/auth/register', {ip: '198.51.100.7', json: {username: 'dave', password: 'password123'}});
+    assert.equal(dave.status, 200);
+    await call('POST', '/auth/register', {ip: '198.51.100.7', json: {username: 'dave2', password: 'password123'}});
+    let r = await call('GET', '/admin/log?action=account.create', {token: alice});
+    const created = r.body.entries.find(e => e.target === 'dave2');
+    assert.ok(created, 'account creation is logged');
+    assert.equal(created.ip, '198.51.100.7');
+    assert.match(created.details, /1 other account/);
+    // Admins see IPs and same-IP accounts; regular users can't use the admin API.
+    r = await call('GET', '/admin/users?q=198.51.100.*', {token: alice});
+    assert.deepEqual(r.body.users.map(u => u.username).sort(), ['dave', 'dave2']);
+    assert.equal(r.body.users[0].sameIpAccounts, 1);
+    assert.equal((await call('GET', '/admin/users', {token: bob})).status, 403);
+    // Ban with a reason.
+    r = await call('POST', '/admin/users/dave/ban', {token: alice, json: {reason: 'Spamming comments'}});
+    assert.equal(r.status, 200);
+    r = await call('POST', '/auth/login', {ip: '198.51.100.9', json: {username: 'dave', password: 'password123'}});
+    assert.equal(r.status, 403);
+    assert.match(r.body.error, /Spamming comments/);
+    r = await call('GET', '/admin/users?filter=banned', {token: alice});
+    const d = r.body.users.find(u => u.username === 'dave');
+    assert.equal(d.banReason, 'Spamming comments');
+    assert.equal(d.bannedBy, 'alice');
+    // IP bans block sign-ups and changes from that network, but not browsing.
+    assert.equal((await call('POST', '/admin/ip-bans', {token: bob, json: {pattern: '198.51.100.*'}})).status, 403);
+    assert.equal((await call('POST', '/admin/ip-bans', {token: alice, json: {pattern: 'not an ip'}})).status, 400);
+    r = await call('POST', '/admin/ip-bans', {token: alice, json: {pattern: '198.51.100.*', reason: 'ban evasion'}});
+    assert.equal(r.status, 201);
+    r = await call('POST', '/auth/register', {ip: '198.51.100.50', json: {username: 'dave3', password: 'password123'}});
+    assert.equal(r.status, 403);
+    assert.match(r.body.error, /network has been banned/);
+    assert.equal((await call('GET', '/explore', {ip: '198.51.100.50'})).status, 200, 'banned networks can still browse');
+    assert.equal((await call('POST', '/auth/register', {ip: '192.0.2.1', json: {username: 'erin', password: 'password123'}})).status, 200);
+    const bans = (await call('GET', '/admin/ip-bans', {token: alice})).body.bans;
+    assert.equal(bans.length, 1);
+    await call('DELETE', `/admin/ip-bans/${bans[0].id}`, {token: alice});
+    assert.equal((await call('POST', '/auth/register', {ip: '198.51.100.50', json: {username: 'dave3', password: 'password123'}})).status, 200);
+    // Ban + IP ban in one go (admins only).
+    r = await call('POST', '/admin/users/dave3/ban', {token: alice, json: {reason: 'again', banIp: true}});
+    assert.equal(r.status, 200);
+    assert.equal((await call('GET', '/admin/ip-bans', {token: alice})).body.bans[0].pattern, '198.51.100.50');
+    // Unban clears the reason; everything is in the log.
+    await call('POST', '/admin/users/dave/unban', {token: alice});
+    assert.equal((await call('GET', '/admin/users?q=dave', {token: alice})).body.users.find(u => u.username === 'dave').banReason, '');
+    const actions = (await call('GET', '/admin/log?limit=60', {token: alice})).body.entries.map(e => e.action);
+    for (const a of ['account.create', 'user.ban', 'user.unban', 'ip.ban', 'ip.unban']) {
+        assert.ok(actions.includes(a), `log has ${a}`);
+    }
+    assert.ok((await call('GET', '/admin/log?action=account.login', {token: alice})).body.entries.length > 0, 'logins are logged');
+    const stats = (await call('GET', '/admin/stats', {token: alice})).body.stats;
+    assert.ok(stats.users >= 6 && stats.banned >= 1 && stats.ip_bans === 1);
 });
 
 test('reports and moderation', async () => {
