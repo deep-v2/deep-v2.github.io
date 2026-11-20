@@ -88,7 +88,7 @@ const reportDialog = async (targetType, targetId) => {
     }
     const ownerLine = h('div', {class: 'owner-line'}, avatarEl(project.owner),
         h('div', {},
-            h('a', {href: link('user.html', {u: project.owner.username}), style: 'font-weight:800;color:var(--text)'}, project.owner.displayName), verifiedTick(project.owner),
+            h('a', {href: link('user', {u: project.owner.username}), style: 'font-weight:800;color:var(--text)'}, project.owner.displayName), verifiedTick(project.owner),
             h('div', {class: 'muted small'},
                 project.shared ? `Shared ${timeAgo(project.sharedAt)}` : 'Not shared',
                 ` · Updated ${timeAgo(project.updatedAt)}`)));
@@ -101,7 +101,7 @@ const reportDialog = async (targetType, targetId) => {
     const loveBtn = h('button', {class: `btn love ${project.loved ? 'on' : ''}`}, `♥ ${fmt(project.stats.loves)}`);
     const favBtn = h('button', {class: `btn ${project.favorited ? 'on' : ''}`}, `★ ${fmt(project.stats.favorites)}`);
     const requireLogin = () => {
-        location.href = `${link('login.html')}?next=${encodeURIComponent(location.pathname + location.search)}`;
+        location.href = `${link('login')}?next=${encodeURIComponent(location.pathname + location.search)}`;
     };
     loveBtn.addEventListener('click', async () => {
         if (!user) return requireLogin();
@@ -149,7 +149,7 @@ const reportDialog = async (targetType, targetId) => {
     right.append(titleEl, ownerLine);
     if (project.remixOf) {
         right.append(h('div', {class: 'notice small'}, '⑂ Remix of ',
-            h('a', {href: link('project.html', {id: project.remixOf.id})}, project.remixOf.title),
+            h('a', {href: link('project', {id: project.remixOf.id})}, project.remixOf.title),
             project.remixOf.owner ? ` by ${project.remixOf.owner}` : ''));
     }
     right.append(
@@ -290,7 +290,7 @@ async function deleteProject (project) {
     if (!ok) return;
     try {
         await api.del(`/projects/${project.id}`);
-        location.href = link('mystuff.html');
+        location.href = link('mystuff');
     } catch (e) {
         toast(e.message);
     }
@@ -356,7 +356,7 @@ function renderComments (box, project, user, isOwner, isMod) {
         const el = h('div', {class: `comment ${c.pinned ? 'pinned' : ''}`}, avatarEl(c.author, 'sm'),
             h('div', {class: 'body'},
                 c.pinned ? h('div', {class: 'pinned-label small'}, '📌 Pinned by the creator') : null,
-                h('div', {class: 'head'}, h('a', {href: link('user.html', {u: c.author.username})}, c.author.displayName), verifiedTick(c.author),
+                h('div', {class: 'head'}, h('a', {href: link('user', {u: c.author.username})}, c.author.displayName), verifiedTick(c.author),
                     h('span', {class: 'muted'}, timeAgo(c.createdAt))),
                 h('div', {class: 'text'}, c.hidden ? h('em', {class: 'muted'}, 'This comment was removed by a moderator.') :
                     c.score <= BURIED_SCORE ? buried(c.content) : c.content),
@@ -400,7 +400,7 @@ function renderComments (box, project, user, isOwner, isMod) {
         };
         const vote = value => async () => {
             if (!user) {
-                location.href = `${link('login.html')}?next=${encodeURIComponent(location.pathname + location.search)}`;
+                location.href = `${link('login')}?next=${encodeURIComponent(location.pathname + location.search)}`;
                 return;
             }
             const next = c.myVote === value ? 0 : value;
@@ -446,7 +446,7 @@ function renderComments (box, project, user, isOwner, isMod) {
     };
     box.append(h('div', {class: 'comments-head'}, header, sortTabs));
     if (user && (project.shared || isOwner)) box.append(composer(null, load));
-    else if (!user) box.append(h('p', {class: 'muted'}, h('a', {href: `${link('login.html')}?next=${encodeURIComponent(location.pathname + location.search)}`}, 'Sign in'), ' to comment.'));
+    else if (!user) box.append(h('p', {class: 'muted'}, h('a', {href: `${link('login')}?next=${encodeURIComponent(location.pathname + location.search)}`}, 'Sign in'), ' to comment.'));
     box.append(list);
     load();
 }

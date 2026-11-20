@@ -119,7 +119,7 @@ const saveToKbau = async (vm, title) => {
     setKbauProjectId(body.project.id);
     return {
         id: body.project.id,
-        url: siteUrl(`project.html?id=${encodeURIComponent(body.project.id)}`),
+        url: siteUrl(`project?id=${encodeURIComponent(body.project.id)}`),
         created: !existing
     };
 };

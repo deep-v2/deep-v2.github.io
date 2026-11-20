@@ -184,7 +184,7 @@ export const signOut = async () => {
 };
 
 export const editorUrl = async (params = {}) => {
-    const url = new URL('editor/editor.html', siteRoot);
+    const url = new URL('editor/', siteRoot);
     for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== null) url.searchParams.set(k, v);
     if (params.kbau_project) {
         const ws = await cloudHost(params.kbau_project);

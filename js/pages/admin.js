@@ -6,7 +6,7 @@ let me = null;
 const isAdmin = () => me && me.role === 'admin';
 
 const when = ms => (ms ? h('span', {title: new Date(ms).toLocaleString()}, timeAgo(ms)) : h('span', {class: 'muted'}, 'never'));
-const userLink = name => (name ? h('a', {href: link('user.html', {u: name})}, `@${name}`) : h('span', {class: 'muted'}, 'Someone'));
+const userLink = name => (name ? h('a', {href: link('user', {u: name})}, `@${name}`) : h('span', {class: 'muted'}, 'Someone'));
 const searchBox = (placeholder, value, onSearch) => {
     const input = h('input', {type: 'text', role: 'searchbox', placeholder, value: value || '', 'aria-label': placeholder});
     let timer;
@@ -84,9 +84,9 @@ const reports = async (body, opts) => {
 function reportCard (r, refresh) {
     let target;
     if (!r.target) target = h('span', {class: 'muted'}, '(target no longer exists)');
-    else if (r.targetType === 'project') target = h('a', {href: link('project.html', {id: r.target.id})}, `Project “${r.target.title}” by ${r.target.owner}`, r.target.hidden ? ' (hidden)' : '');
-    else if (r.targetType === 'comment') target = h('div', {}, `Comment by ${r.target.author.username} on `, h('a', {href: link('project.html', {id: r.target.projectId})}, `project ${r.target.projectId}`), h('blockquote', {class: 'prose quote'}, r.target.content));
-    else target = h('a', {href: link('user.html', {u: r.target.username})}, `User @${r.target.username}`, r.target.banned ? ' (banned)' : '');
+    else if (r.targetType === 'project') target = h('a', {href: link('project', {id: r.target.id})}, `Project “${r.target.title}” by ${r.target.owner}`, r.target.hidden ? ' (hidden)' : '');
+    else if (r.targetType === 'comment') target = h('div', {}, `Comment by ${r.target.author.username} on `, h('a', {href: link('project', {id: r.target.projectId})}, `project ${r.target.projectId}`), h('blockquote', {class: 'prose quote'}, r.target.content));
+    else target = h('a', {href: link('user', {u: r.target.username})}, `User @${r.target.username}`, r.target.banned ? ' (banned)' : '');
     const note = h('input', {type: 'text', placeholder: 'Note — also used as the ban reason', maxlength: 1000});
     const act = action => async () => {
         try {
@@ -143,9 +143,9 @@ function userRow (u, refresh) {
         u.sameIpAccounts ? h('span', {class: 'badge warn', style: 'margin-left:6px'}, `${u.sameIpAccounts} other account${u.sameIpAccounts === 1 ? '' : 's'} on this IP`) : null) : null;
     const canBan = u.id !== me.id && u.role !== 'admin' && !(u.role === 'moderator' && !isAdmin());
     return h('div', {class: `card admin-user ${u.banned ? 'is-banned' : ''}`},
-        h('a', {href: link('user.html', {u: u.username})}, avatarEl(u)),
+        h('a', {href: link('user', {u: u.username})}, avatarEl(u)),
         h('div', {class: 'grow'},
-            h('div', {}, h('a', {href: link('user.html', {u: u.username}), style: 'font-weight:800;color:var(--text)'}, userName(u)),
+            h('div', {}, h('a', {href: link('user', {u: u.username}), style: 'font-weight:800;color:var(--text)'}, userName(u)),
                 h('span', {class: 'muted'}, ` @${u.username}`),
                 u.role !== 'user' ? h('span', {class: 'badge accent', style: 'margin-left:6px'}, u.role) : null,
                 u.banned ? h('span', {class: 'badge danger', style: 'margin-left:6px'}, 'banned') : null),

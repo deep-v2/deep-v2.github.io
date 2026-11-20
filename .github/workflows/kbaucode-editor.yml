@@ -63,7 +63,8 @@ jobs:
           rm -rf site/editor
           mkdir -p site/editor
           cp -r gui/build/. site/editor/
-          # kbau.lol/editor/ opens the editor (TurboWarp's index.html is the player-only view)
+          # kbau.lol/editor/ opens the editor; TurboWarp's player-only page becomes player.html
+          mv site/editor/index.html site/editor/player.html
           cp site/editor/editor.html site/editor/index.html
           # GitHub Pages (Jekyll) ignores paths starting with "_"; fail if any exist.
           if find site/editor -name '_*' | grep -q .; then

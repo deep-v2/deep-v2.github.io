@@ -1,0 +1,99 @@
+# Builds the offline KbauBlocks desktop app for Windows (editor without community features, in Electron)
+# and publishes it as a GitHub Release. The site's Download page links to the latest release's files:
+#   https://github.com/<repo>/releases/latest/download/KbauBlocks-Setup.exe
+#   https://github.com/<repo>/releases/latest/download/KbauBlocks-Portable.exe
+name: KbauBlocks desktop build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'kbaucode/editor-src/**'
+      - 'kbaucode/desktop/**'
+      - '.github/workflows/kbaucode-desktop.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: kbaucode-desktop
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out site
+        uses: actions/checkout@v4
+        with:
+          path: site
+
+      - name: Read pinned TurboWarp commit
+        id: pin
+        run: echo "sha=$(tr -d '[:space:]' < site/kbaucode/editor-src/TURBOWARP_COMMIT)" >> "$GITHUB_OUTPUT"
+
+      - name: Check out TurboWarp scratch-gui
+        uses: actions/checkout@v4
+        with:
+          repository: TurboWarp/scratch-gui
+          ref: ${{ steps.pin.outputs.sha }}
+          path: gui
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            gui/package-lock.json
+            site/kbaucode/desktop/package-lock.json
+
+      - name: Install editor dependencies
+        working-directory: gui
+        run: npm ci
+
+      - name: Apply KbauBlocks patch set (offline)
+        run: node site/kbaucode/editor-src/apply-kbau.mjs gui --offline
+
+      - name: Build offline editor
+        working-directory: gui
+        env:
+          NODE_ENV: production
+          NODE_OPTIONS: --max-old-space-size=6144
+        run: npx webpack --bail
+
+      - name: Install desktop dependencies
+        working-directory: site/kbaucode/desktop
+        run: npm ci
+
+      - name: Package Windows app
+        working-directory: site/kbaucode/desktop
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: |
+          node prepare-app.mjs ../../../gui/build
+          npm version --no-git-tag-version "1.0.${{ github.run_number }}"
+          npx electron-builder --win --publish never
+          ls -la dist
+
+      - name: Publish release
+        working-directory: site/kbaucode/desktop/dist
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="desktop-v1.0.${{ github.run_number }}"
+          gh release create "$TAG" KbauBlocks-Setup.exe KbauBlocks-Portable.exe \
+            --repo "${{ github.repository }}" \
+            --target "${{ github.sha }}" \
+            --title "KbauBlocks for Windows 1.0.${{ github.run_number }}" \
+            --notes "Offline KbauBlocks editor for Windows (no community features). Built from ${{ github.sha }}.
+
+          - **KbauBlocks-Setup.exe**: installer (Start menu + desktop shortcut)
+          - **KbauBlocks-Portable.exe**: no install, just run it
+
+          Windows SmartScreen may warn because the app isn't code-signed: click *More info → Run anyway*." \
+            --latest

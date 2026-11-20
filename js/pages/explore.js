@@ -16,12 +16,12 @@ const main = $('#main');
     let path;
     if (q) {
         main.append(h('div', {class: 'tabs'}, [[null, 'All'], ['users', 'Users'], ['projects', 'Projects']].map(([t, label]) =>
-            h('a', {class: t === type ? 'active' : '', href: link('explore.html', t ? {q, type: t} : {q})}, label))));
+            h('a', {class: t === type ? 'active' : '', href: link('explore', t ? {q, type: t} : {q})}, label))));
         path = p => `/search?q=${encodeURIComponent(q)}&page=${p}${type ? `&type=${type}` : ''}`;
     } else {
         const sort = ['trending', 'popular', 'recent'].includes(param('sort')) ? param('sort') : 'trending';
         main.append(h('div', {class: 'tabs'}, [['trending', 'Trending'], ['popular', 'Popular'], ['recent', 'Recent']].map(([s, label]) =>
-            h('a', {class: s === sort ? 'active' : '', href: link('explore.html', {sort: s})}, label))));
+            h('a', {class: s === sort ? 'active' : '', href: link('explore', {sort: s})}, label))));
         path = p => `/explore?sort=${sort}&page=${p}`;
     }
     const usersBox = h('div');
@@ -38,7 +38,7 @@ const main = $('#main');
             } else {
                 if (page === 0 && data.users && data.users.length) {
                     usersBox.append(h('h2', {}, 'People'), h('div', {class: 'row', style: 'margin-bottom:24px'}, data.users.map(u =>
-                        h('a', {class: 'btn', href: link('user.html', {u: u.username})}, avatarEl(u, 'sm'), userName(u)))), h('h2', {}, 'Projects'));
+                        h('a', {class: 'btn', href: link('user', {u: u.username})}, avatarEl(u, 'sm'), userName(u)))), h('h2', {}, 'Projects'));
                 }
                 data.projects.forEach(p => grid.append(projectCard(p)));
                 count = data.projects.length;

@@ -6,11 +6,11 @@ const main = $('#main');
     const {user, online} = await boot('mystuff');
     if (!online) return main.append(h('h1', {}, 'My Stuff'), offlineNotice());
     if (!user) {
-        location.href = `${link('login.html')}?next=${encodeURIComponent(location.pathname)}`;
+        location.href = `${link('login')}?next=${encodeURIComponent(location.pathname)}`;
         return;
     }
     main.append(h('div', {class: 'row', style: 'margin-bottom:10px'}, h('h1', {style: 'margin:0'}, 'My Stuff'), h('span', {class: 'spacer'}),
-        h('a', {class: 'btn primary', href: link('editor/editor.html')}, '+ New project'),
+        h('a', {class: 'btn primary', href: link('editor/')}, '+ New project'),
         h('button', {class: 'btn', onclick: newCollection}, '+ New collection')));
     main.append(h('p', {class: 'muted'}, 'Projects you save with “File → Save to KbauBlocks” in the editor appear here. Share them when they’re ready.'));
 
@@ -34,7 +34,7 @@ const main = $('#main');
 async function renderProjects (body, user) {
     const {projects} = await api.get(`/users/${encodeURIComponent(user.username)}/projects?all=1&limit=60`);
     if (!projects.length) {
-        body.replaceChildren(h('p', {class: 'empty'}, 'No projects yet. ', h('a', {href: link('editor/editor.html')}, 'Make one!')));
+        body.replaceChildren(h('p', {class: 'empty'}, 'No projects yet. ', h('a', {href: link('editor/')}, 'Make one!')));
         return;
     }
     body.replaceChildren(...projects.map(p => {
@@ -72,7 +72,7 @@ async function renderProjects (body, user) {
         }}, 'Delete');
         return h('div', {class: 'list-row'}, thumb,
             h('div', {class: 'grow'},
-                h('a', {href: link('project.html', {id: p.id}), style: 'font-weight:800;color:var(--text)'}, p.title),
+                h('a', {href: link('project', {id: p.id}), style: 'font-weight:800;color:var(--text)'}, p.title),
                 h('div', {class: 'muted small'},
                     p.shared ? h('span', {class: 'badge accent'}, 'Shared') : h('span', {class: 'badge warn'}, 'Unshared'),
                     ` v${p.version} · updated ${timeAgo(p.updatedAt)} · ♥ ${p.stats.loves} · 👁 ${p.stats.views}`)),
@@ -84,9 +84,9 @@ async function renderCollections (body, user) {
     const {collections} = await api.get(`/users/${encodeURIComponent(user.username)}/collections`);
     body.replaceChildren(...(collections.length ? collections.map(c => h('div', {class: 'list-row'},
         h('div', {class: 'grow'},
-            h('a', {href: link('collection.html', {id: c.id}), style: 'font-weight:800;color:var(--text)'}, c.title),
+            h('a', {href: link('collection', {id: c.id}), style: 'font-weight:800;color:var(--text)'}, c.title),
             h('div', {class: 'muted small'}, `${c.projectCount} projects · updated ${timeAgo(c.updatedAt)}`)),
-        h('a', {class: 'btn small', href: link('collection.html', {id: c.id})}, 'Open'))) :
+        h('a', {class: 'btn small', href: link('collection', {id: c.id})}, 'Open'))) :
         [h('p', {class: 'empty'}, 'No collections yet.')]));
 }
 
@@ -100,7 +100,7 @@ async function newCollection () {
     if (!ok) return;
     try {
         const {collection} = await api.post('/collections', {title: title.value, description: description.value});
-        location.href = link('collection.html', {id: collection.id});
+        location.href = link('collection', {id: collection.id});
     } catch (e) {
         toast(e.message);
     }

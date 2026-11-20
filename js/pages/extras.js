@@ -1,5 +1,5 @@
-// Unified extension catalog: TurboWarp gallery + PenguinMod gallery + custom URLs, all opening in the KbauBlocks editor.
-import {$, boot, errorNotice, h, link} from '../ui.js';
+// Extras: KbauBlocks' own extras (Claude MCP) + unified extension catalog: TurboWarp gallery + PenguinMod gallery + custom URLs, all opening in the KbauBlocks editor.
+import {$, boot, errorNotice, h, link, toast} from '../ui.js';
 
 const main = $('#main');
 
@@ -86,14 +86,16 @@ function parsePenguinModList (source) {
     return JSON.parse(out).filter(e => e && e.name && e.code);
 }
 
-const openUrl = url => `${link('editor/editor.html')}?extension=${encodeURIComponent(url)}`;
+const openUrl = url => `${link('editor/')}?extension=${encodeURIComponent(url)}`;
 
 (async () => {
-    await boot('extensions');
-    main.append(h('h1', {}, 'Extensions'),
+    await boot('extras');
+    main.append(h('h1', {}, 'Extras'),
         h('p', {class: 'muted', style: 'max-width:720px'},
-            'One catalog for every extension ecosystem. Pick an extension to open the editor with it loaded. ',
+            'Extras add new blocks to the editor. Pick one to open the editor with it loaded. ',
             'Unsandboxed extensions ask for your permission before running.'));
+
+    main.append(claudeMcpCard());
 
     const customUrl = h('input', {type: 'url', id: 'ext-url', placeholder: 'https://example.com/my-extension.js'});
     main.append(h('form', {class: 'card', style: 'margin-bottom:22px', onsubmit: e => {
@@ -143,3 +145,48 @@ const openUrl = url => `${link('editor/editor.html')}?extension=${encodeURICompo
     filter.addEventListener('input', render);
     show('turbowarp');
 })();
+
+function claudeMcpCard () {
+    const bridgeUrl = link('kbaucode/mcp/kbaublocks-mcp.mjs');
+    const extUrl = link('editor/extras/claude-mcp.js');
+    const codeBlock = text => {
+        const pre = h('pre', {class: 'code'}, h('code', {}, text));
+        const copy = h('button', {class: 'btn small ghost copy-btn', type: 'button', onclick: async () => {
+            try {
+                await navigator.clipboard.writeText(text);
+                toast('Copied');
+            } catch (e) {
+                // ignore
+            }
+        }}, 'Copy');
+        return h('div', {class: 'code-wrap'}, pre, copy);
+    };
+    return h('section', {class: 'card claude-mcp', id: 'claude-mcp', style: 'margin-bottom:22px'},
+        h('div', {class: 'row', style: 'align-items:flex-start;gap:18px'},
+            h('img', {src: link('kbaucode/editor-src/overlay/src/lib/libraries/extensions/kbau/claude-mcp-small.svg'), alt: '', width: 56, height: 56}),
+            h('div', {style: 'flex:1;min-width:240px'},
+                h('h2', {style: 'margin:0 0 4px'}, 'Claude MCP'),
+                h('p', {class: 'muted', style: 'margin:0'},
+                    'Let Claude build in your project: it can draw sprites and backdrops, write scripts, make variables, ',
+                    'run the project and look at the stage. It works through MCP (Model Context Protocol) with a small bridge ',
+                    'program on your computer, in the web editor and in the desktop app.'))),
+        h('ol', {class: 'steps'},
+            h('li', {}, 'Install ', h('a', {href: 'https://nodejs.org/', target: '_blank', rel: 'noopener'}, 'Node.js'), ' (version 18 or newer).'),
+            h('li', {}, 'Download the bridge: ',
+                h('a', {class: 'btn small', href: bridgeUrl, download: 'kbaublocks-mcp.mjs'}, 'kbaublocks-mcp.mjs'),
+                ' and save it somewhere permanent, e.g. ', h('code', {}, 'C:\\KbauBlocks\\kbaublocks-mcp.mjs'), '.'),
+            h('li', {}, 'Add it to Claude.',
+                h('div', {class: 'muted small', style: 'margin:8px 0 4px'}, 'Claude Code:'),
+                codeBlock('claude mcp add kbaublocks -- node "C:\\KbauBlocks\\kbaublocks-mcp.mjs"'),
+                h('div', {class: 'muted small', style: 'margin:10px 0 4px'}, 'Claude Desktop (Settings → Developer → Edit Config), inside "mcpServers":'),
+                codeBlock('"kbaublocks": {\n  "command": "node",\n  "args": ["C:\\\\KbauBlocks\\\\kbaublocks-mcp.mjs"]\n}')),
+            h('li', {}, 'Open the editor and add ', h('b', {}, 'Claude MCP'), ' from the Extras list (bottom-left button). ',
+                'It connects by itself; the "connected to Claude?" block turns true.'),
+            h('li', {}, 'Ask Claude, e.g. ', h('i', {}, '"Make a game where a cat catches falling apples"'), '.')),
+        h('div', {class: 'row'},
+            h('a', {class: 'btn primary', href: `${link('editor/')}?extension=${encodeURIComponent(extUrl)}`}, 'Open editor with Claude MCP'),
+            h('a', {class: 'btn ghost', href: bridgeUrl, download: 'kbaublocks-mcp.mjs'}, 'Download bridge')),
+        h('p', {class: 'muted small', style: 'margin:12px 0 0'},
+            'The bridge only listens on your own computer (127.0.0.1) and only accepts the KbauBlocks editor. ',
+            'Your project goes to Claude only when Claude asks for it with a tool you approve.'));
+}

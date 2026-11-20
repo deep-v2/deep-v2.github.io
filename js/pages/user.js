@@ -43,7 +43,7 @@ const main = $('#main');
     };
     followBtn.addEventListener('click', async () => {
         if (!me) {
-            location.href = link('login.html', {next: location.pathname + location.search});
+            location.href = link('login', {next: location.pathname + location.search});
             return;
         }
         const wasFriends = rel.friends;
@@ -75,7 +75,7 @@ const main = $('#main');
                     user.banned ? h('span', {class: 'badge warn', style: 'margin-left:8px'}, 'suspended') : null),
                 h('div', {class: 'muted'}, `@${user.username} · joined ${timeAgo(user.createdAt)}`, me && !isMe ? followsYou : null)),
             h('div', {class: 'row', style: 'padding-bottom:10px'},
-                isMe ? h('a', {class: 'btn', href: link('settings.html')}, 'Edit profile') : null,
+                isMe ? h('a', {class: 'btn', href: link('settings')}, 'Edit profile') : null,
                 !isMe && !user.banned ? followBtn : null,
                 isAdmin && !isMe && !isStaff ? h('button', {class: 'btn ghost small', onclick: async () => {
                     try {
@@ -131,7 +131,7 @@ const main = $('#main');
                     if (c.thumbnailUrl) apiUrlSafe(c.thumbnailUrl).then(u => {
                         img.src = u;
                     });
-                    return h('a', {class: 'project-card', href: link('collection.html', {id: c.id})},
+                    return h('a', {class: 'project-card', href: link('collection', {id: c.id})},
                         h('div', {class: 'thumb'}, c.thumbnailUrl ? img : h('img', {class: 'placeholder', src: link('logo.png'), alt: ''})),
                         h('div', {class: 'meta'}, h('div', {class: 'title'}, c.title), h('div', {class: 'by'}, `${c.projectCount} projects`)));
                 })) : h('p', {class: 'empty'}, 'No collections yet.'));

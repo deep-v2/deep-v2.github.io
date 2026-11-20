@@ -27,8 +27,8 @@ const features = [
             h('h1', {}, user ? `Welcome back, ${user.displayName || user.username}!` : 'Build anything, block by block.'),
             h('p', {}, 'KbauBlocks is a fast, open-source creative coding studio that runs your Scratch 3 projects and lets you share them with a community.'),
             h('div', {class: 'row'},
-                h('a', {class: 'btn primary', href: link('editor/editor.html')}, 'Start creating'),
-                h('a', {class: 'btn', href: link('explore.html')}, 'Explore projects')))));
+                h('a', {class: 'btn primary', href: link('editor/')}, 'Start creating'),
+                h('a', {class: 'btn', href: link('explore')}, 'Explore projects')))));
     main.append(h('div', {class: 'feature-grid'}, features.map(([color, icon, title, text]) => h('div', {class: 'card feature'},
         h('div', {class: 'icon', style: `background:${color}`}, icon), h('h3', {}, title), h('p', {class: 'muted small'}, text)))));
 
@@ -39,7 +39,7 @@ const features = [
     const sections = [['trending', 'Trending'], ['recent', 'Recently shared'], ['popular', 'Most popular']];
     for (const [sort, title] of sections) {
         const body = h('div', {}, h('p', {class: 'empty'}, 'Loading…'));
-        main.append(h('div', {class: 'section-head'}, h('h2', {}, title), h('a', {href: link('explore.html', {sort})}, 'See all')), body);
+        main.append(h('div', {class: 'section-head'}, h('h2', {}, title), h('a', {href: link('explore', {sort})}, 'See all')), body);
         api.get(`/explore?sort=${sort}&limit=8`)
             .then(({projects}) => body.replaceChildren(projectGrid(projects, 'No shared projects yet. Be the first!')))
             .catch(e => body.replaceChildren(errorNotice(e)));

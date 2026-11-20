@@ -43,3 +43,10 @@ Last updated: 2026-11-16. Read this first when continuing development.
 * Do not hand-edit `editor/` — the next build overwrites it.
 * GitHub Pages runs Jekyll; the workflow fails if the build contains paths starting with `_`.
 * The editor's own theme setting key is `kbau:theme`; the website's is `kbau:site-theme`; auth is `kbau:token` / `kbau:user`; API override is `kbau:api`. Editor and site must stay on the same origin to share auth.
+
+## Clean URLs, Extras, Claude MCP, desktop app (2026-11-20)
+
+* **Clean URLs:** site links have no `.html` (`kbau.lol/explore`); GitHub Pages serves `explore.html` for `/explore`. The editor is at `kbau.lol/editor/` (its router is patched so the URL stays on the folder; TurboWarp's player page is `editor/player.html`).
+* **Extras:** the editor's extension tag/gallery and the site page are called Extras (`extras.html`; `extensions.html` redirects).
+* **Claude MCP:** extension `editor-src/overlay/static/extras/claude-mcp.js` (served at `editor/extras/claude-mcp.js`, trusted/unsandboxed, listed first in the editor's extension library) + zero-dependency bridge `kbaucode/mcp/kbaublocks-mcp.mjs` (MCP over stdio ↔ WebSocket `127.0.0.1:61017`, only allows the KbauBlocks origins). Setup steps are on the Extras page.
+* **Desktop app:** `kbaucode/desktop/` (Electron). `.github/workflows/kbaucode-desktop.yml` builds the editor with `apply-kbau.mjs --offline` (no share/project page/save-to-KbauBlocks/feedback, bundled Nunito), packages `KbauBlocks-Setup.exe` + `KbauBlocks-Portable.exe` and publishes a GitHub Release (`desktop-v1.0.<run>`); `download.html` links to the latest release. The app blocks all network except localhost.

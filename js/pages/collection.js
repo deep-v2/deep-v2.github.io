@@ -17,7 +17,7 @@ const main = $('#main');
     main.append(h('div', {class: 'row'},
         h('div', {style: 'flex:1;min-width:240px'},
             h('h1', {style: 'margin-bottom:4px'}, collection.title),
-            h('div', {class: 'muted'}, 'Collection by ', h('a', {href: link('user.html', {u: collection.owner.username})}, collection.owner.displayName),
+            h('div', {class: 'muted'}, 'Collection by ', h('a', {href: link('user', {u: collection.owner.username})}, collection.owner.displayName),
                 ` · ${collection.projectCount} projects · updated ${timeAgo(collection.updatedAt)}`)),
         isOwner ? h('button', {class: 'btn', onclick: () => edit(collection)}, 'Edit') : null,
         isOwner ? h('button', {class: 'btn danger', onclick: () => remove(collection)}, 'Delete') : null));
@@ -64,7 +64,7 @@ async function remove (collection) {
     if (!ok) return;
     try {
         await api.del(`/collections/${collection.id}`);
-        location.href = link('mystuff.html');
+        location.href = link('mystuff');
     } catch (e) {
         toast(e.message);
     }

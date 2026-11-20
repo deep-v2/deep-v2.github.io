@@ -5,7 +5,7 @@ const main = $('#main');
 (async () => {
     const {user, online} = await boot('login');
     const next = param('next');
-    const safeNext = next && next.startsWith('/') && !next.startsWith('//') ? next : link('index.html');
+    const safeNext = next && next.startsWith('/') && !next.startsWith('//') ? next : link('./');
     const wrap = h('div', {class: 'card', style: 'max-width:420px;margin:30px auto'});
     main.append(wrap);
     if (!online) return wrap.append(offlineNotice());

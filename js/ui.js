@@ -92,7 +92,7 @@ export const userName = (user, attrs = {}) => h('span', {class: 'user-name', ...
     user.displayName || user.username, verifiedTick(user));
 
 export const userGrid = (users, emptyText = 'Nobody here yet.') => (users.length ?
-    h('div', {class: 'user-grid'}, users.map(u => h('a', {class: 'user-card card', href: link('user.html', {u: u.username})},
+    h('div', {class: 'user-grid'}, users.map(u => h('a', {class: 'user-card card', href: link('user', {u: u.username})},
         avatarEl(u), h('div', {class: 'user-card-text'}, h('b', {}, userName(u)), h('span', {class: 'muted small'}, `@${u.username}`))))) :
     h('p', {class: 'empty'}, emptyText));
 
@@ -109,7 +109,7 @@ export const projectCard = project => {
     } else {
         thumb.append(h('img', {class: 'placeholder', src: PLACEHOLDER, alt: ''}));
     }
-    return h('a', {class: 'project-card', href: link('project.html', {id: project.id})},
+    return h('a', {class: 'project-card', href: link('project', {id: project.id})},
         thumb,
         h('div', {class: 'meta'},
             h('div', {class: 'title', title: project.title}, project.title,
@@ -128,7 +128,7 @@ export const projectGrid = (projects, emptyText = 'Nothing here yet.') => (
 export const offlineNotice = () => h('div', {class: 'notice warn'},
     h('b', {}, 'Community server not connected. '),
     'Sharing, accounts and comments need a KbauBlocks server. The editor still works fully on its own. ',
-    h('a', {href: link('settings.html', {tab: 'server'})}, 'Connect a server'),
+    h('a', {href: link('settings', {tab: 'server'})}, 'Connect a server'),
     ' or ',
     h('a', {href: 'https://github.com/deep-v2/deep-v2.github.io/tree/main/kbaucode/server'}, 'host your own'),
     '.');
@@ -186,10 +186,10 @@ const attachSearchSuggest = (form, input) => {
         const icon = svg => h('span', {class: 'suggest-icon', html: svg});
         // (replaceChildren would print a null as the text "null", so leave the user row out entirely.)
         box.replaceChildren(...[
-            exactUser ? item(link('user.html', {u: exactUser.username}), avatarEl(exactUser, 'sm'),
+            exactUser ? item(link('user', {u: exactUser.username}), avatarEl(exactUser, 'sm'),
                 h('b', {}, userName(exactUser)), h('span', {class: 'muted small'}, ` @${exactUser.username}`)) : null,
-            item(link('explore.html', {q: term, type: 'users'}), icon(USER_ICON), 'Search users ', h('span', {class: 'muted'}, `“${term}”`)),
-            item(link('explore.html', {q: term, type: 'projects'}), icon(SEARCH_ICON), 'Search projects ', h('span', {class: 'muted'}, `“${term}”`))
+            item(link('explore', {q: term, type: 'users'}), icon(USER_ICON), 'Search users ', h('span', {class: 'muted'}, `“${term}”`)),
+            item(link('explore', {q: term, type: 'projects'}), icon(SEARCH_ICON), 'Search projects ', h('span', {class: 'muted'}, `“${term}”`))
         ].filter(Boolean));
         box.classList.remove('hidden');
         active = -1;
@@ -236,17 +236,18 @@ const attachSearchSuggest = (form, input) => {
 export const renderHeader = async active => {
     const header = h('header', {class: 'site-header'});
     const nav = h('nav', {class: 'nav', 'aria-label': 'Main'},
-        h('a', {class: `create ${active === 'create' ? 'active' : ''}`, href: link('editor/editor.html')}, 'Create'),
-        h('a', {class: active === 'explore' ? 'active' : '', href: link('explore.html')}, 'Explore'),
-        h('a', {class: active === 'extensions' ? 'active' : '', href: link('extensions.html')}, 'Extensions'));
+        h('a', {class: `create ${active === 'create' ? 'active' : ''}`, href: link('editor/')}, 'Create'),
+        h('a', {class: active === 'explore' ? 'active' : '', href: link('explore')}, 'Explore'),
+        h('a', {class: active === 'extras' ? 'active' : '', href: link('extras')}, 'Extras'),
+        h('a', {class: active === 'download' ? 'active' : '', href: link('download')}, 'Download'));
     const searchInput = h('input', {type: 'search', name: 'q', placeholder: 'Search projects and people', 'aria-label': 'Search', value: active === 'explore' ? (param('q') || '') : ''});
-    const search = h('form', {class: 'search', role: 'search', action: link('explore.html'), method: 'get', html: SEARCH_ICON});
+    const search = h('form', {class: 'search', role: 'search', action: link('explore'), method: 'get', html: SEARCH_ICON});
     search.append(searchInput);
     attachSearchSuggest(search, searchInput);
     const right = h('div', {class: 'header-right'});
     const inner = h('div', {class: 'header-inner'},
         h('button', {class: 'menu-toggle', 'aria-label': 'Menu', html: MENU_ICON, onclick: () => nav.classList.toggle('open')}),
-        h('a', {class: 'brand', href: link('index.html')}, h('img', {src: link('logo.png'), alt: ''}), h('span', {}, 'KbauBlocks')),
+        h('a', {class: 'brand', href: link('./')}, h('img', {src: link('logo.png'), alt: ''}), h('span', {}, 'KbauBlocks')),
         nav, search, right);
     header.append(inner);
     document.body.prepend(header);
@@ -255,10 +256,10 @@ export const renderHeader = async active => {
         right.replaceChildren();
         if (user) {
             const menu = h('div', {class: 'dropdown-menu hidden'},
-                h('a', {href: link('user.html', {u: user.username})}, 'Profile'),
-                h('a', {href: link('mystuff.html')}, 'My Stuff'),
-                h('a', {href: link('settings.html')}, 'Settings'),
-                (user.role === 'admin' || user.role === 'moderator') ? h('a', {href: link('admin.html')}, 'Admin') : null,
+                h('a', {href: link('user', {u: user.username})}, 'Profile'),
+                h('a', {href: link('mystuff')}, 'My Stuff'),
+                h('a', {href: link('settings')}, 'Settings'),
+                (user.role === 'admin' || user.role === 'moderator') ? h('a', {href: link('admin')}, 'Admin') : null,
                 h('button', {onclick: async () => {
                     await signOut();
                     location.reload();
@@ -268,18 +269,18 @@ export const renderHeader = async active => {
                 menu.classList.toggle('hidden');
             }}, avatarEl(user, 'sm'), h('span', {class: 'small'}, user.username));
             document.addEventListener('click', () => menu.classList.add('hidden'));
-            right.append(h('a', {class: 'btn small', href: link('mystuff.html')}, 'My Stuff'), h('div', {class: 'dropdown'}, chip, menu));
+            right.append(h('a', {class: 'btn small', href: link('mystuff')}, 'My Stuff'), h('div', {class: 'dropdown'}, chip, menu));
         } else {
             const next = encodeURIComponent(location.pathname + location.search);
             right.append(
-                h('a', {class: 'btn small ghost', href: `${link('login.html')}?next=${next}`}, 'Sign in'),
-                h('a', {class: 'btn small primary', href: `${link('login.html')}?mode=join&next=${next}`}, 'Join'));
+                h('a', {class: 'btn small ghost', href: `${link('login')}?next=${next}`}, 'Sign in'),
+                h('a', {class: 'btn small primary', href: `${link('login')}?mode=join&next=${next}`}, 'Join'));
         }
     };
     renderRight(getCachedUser());
     const available = await serverAvailable();
     if (!available) {
-        right.replaceChildren(h('a', {class: 'btn small primary', href: link('editor/editor.html')}, 'Open editor'));
+        right.replaceChildren(h('a', {class: 'btn small primary', href: link('editor/')}, 'Open editor'));
         return null;
     }
     const user = await refreshMe();
@@ -293,7 +294,8 @@ export const renderFooter = () => {
             h('span', {}, '© KbauBlocks contributors'),
             h('a', {href: link('editor/credits.html')}, 'Credits'),
             h('a', {href: 'https://github.com/deep-v2/deep-v2.github.io/tree/main/kbaucode'}, 'Source code'),
-            h('a', {href: link('docs/ARCHITECTURE.md')}, 'Architecture'),
+            h('a', {href: link('download')}, 'Download for Windows'),
+            h('a', {href: link('kbaucode/docs/ARCHITECTURE.md')}, 'Architecture'),
             h('span', {class: 'spacer'}),
             h('span', {}, 'Built on TurboWarp and Scratch. Not affiliated with the Scratch Foundation.'))));
 };

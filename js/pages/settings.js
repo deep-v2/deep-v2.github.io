@@ -67,7 +67,7 @@ function profile (body, user) {
             } catch (e) {
                 msg.replaceChildren(errorNotice(e));
             }
-        }}, 'Save profile'), h('a', {class: 'btn', href: link('user.html', {u: user.username})}, 'View profile')));
+        }}, 'Save profile'), h('a', {class: 'btn', href: link('user', {u: user.username})}, 'View profile')));
 }
 
 function account (body, user) {
@@ -93,7 +93,7 @@ function account (body, user) {
             h('span', {class: 'spacer'}),
             h('button', {class: 'btn', onclick: async () => {
                 await signOut();
-                location.href = link('index.html');
+                location.href = link('./');
             }}, 'Sign out')));
 }
 
