@@ -195,6 +195,8 @@ test('explore, search, profiles', async () => {
     assert.equal(r.body.projects.length, 2);
     r = await call('GET', '/search?q=bo');
     assert.equal(r.body.users[0].username, 'bob');
+    r = await call('GET', '/users/bob');
+    assert.equal(r.body.user.profileColor, '#ffffff', 'new accounts start with a white profile colour');
     r = await call('PATCH', '/users/me', {token: bob, json: {bio: 'I make games', profileColor: '#ff0000'}});
     assert.equal(r.body.user.bio, 'I make games');
     assert.equal((await call('PATCH', '/users/me', {token: bob, json: {profileColor: 'red'}})).status, 400);

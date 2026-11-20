@@ -55,6 +55,10 @@ const PROJECT_SELECT = `SELECT p.*,
     LEFT JOIN projects rp ON rp.id = p.remix_of
     LEFT JOIN users ru ON ru.id = rp.owner_id`;
 
+// New accounts get a white profile colour (matches the white accent). 0001_init.sql's column default
+// is the old mint; 0002 moved accounts still on that default to white.
+const DEFAULT_PROFILE_COLOR = '#ffffff';
+
 export const createApi = ({db, blobs, apiPrefix = '/kbau-api', admins = [], firstUserIsAdmin = true}) => {
     const adminSet = new Set(admins.map(a => a.toLowerCase()));
     let dummyHash = null;
@@ -261,8 +265,8 @@ export const createApi = ({db, blobs, apiPrefix = '/kbau-api', admins = [], firs
         const role = (isFirst && firstUserIsAdmin) || adminSet.has(username.toLowerCase()) ? 'admin' : 'user';
         let r;
         try {
-            r = await db.run('INSERT INTO users (username, display_name, email, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-                username, username, email || null, hash, role, now());
+            r = await db.run(`INSERT INTO users (username, display_name, email, password_hash, role, profile_color, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)`, username, username, email || null, hash, role, DEFAULT_PROFILE_COLOR, now());
         } catch (e) {
             if (/UNIQUE/i.test(String(e.message))) throw new HttpError(409, 'That username is taken.');
             throw e;
