@@ -269,6 +269,8 @@ async function addToCollection (project, user) {
     }
 }
 
+const BURIED_SCORE = -5;
+
 function renderComments (box, project, user, isOwner, isMod) {
     const list = h('div');
     const header = h('h2', {}, `Comments (${project.stats.comments})`);
@@ -299,8 +301,10 @@ function renderComments (box, project, user, isOwner, isMod) {
                 c.pinned ? h('div', {class: 'pinned-label small'}, '📌 Pinned by the creator') : null,
                 h('div', {class: 'head'}, h('a', {href: link('user.html', {u: c.author.username})}, c.author.displayName), verifiedTick(c.author),
                     h('span', {class: 'muted'}, timeAgo(c.createdAt))),
-                h('div', {class: 'text'}, c.hidden ? h('em', {class: 'muted'}, 'This comment was removed by a moderator.') : c.content),
+                h('div', {class: 'text'}, c.hidden ? h('em', {class: 'muted'}, 'This comment was removed by a moderator.') :
+                    c.score <= BURIED_SCORE ? buried(c.content) : c.content),
                 h('div', {class: 'tools'},
+                    c.hidden ? null : voteControl(c),
                     user && top ? h('button', {onclick: () => replyBox.replaceChildren(composer(c.id, load))}, 'Reply') : null,
                     canPin ? h('button', {onclick: async () => {
                         try {
@@ -324,9 +328,58 @@ function renderComments (box, project, user, isOwner, isMod) {
                 top && c.replies && c.replies.length ? h('div', {class: 'replies'}, c.replies.map(r => commentEl(r, false))) : null));
         return el;
     };
+    // Upvote / downvote: click the same arrow again to take your vote back.
+    const voteControl = c => {
+        const own = user && user.username === c.author.username;
+        const score = h('span', {class: 'vote-score'}, String(c.score));
+        const up = h('button', {class: 'vote up', 'aria-label': 'Upvote', title: own ? "You can't vote on your own comment" : 'Upvote'}, '▲');
+        const down = h('button', {class: 'vote down', 'aria-label': 'Downvote', title: own ? "You can't vote on your own comment" : 'Downvote'}, '▼');
+        const paint = () => {
+            score.textContent = String(c.score);
+            up.classList.toggle('on', c.myVote === 1);
+            down.classList.toggle('on', c.myVote === -1);
+            up.setAttribute('aria-pressed', String(c.myVote === 1));
+            down.setAttribute('aria-pressed', String(c.myVote === -1));
+        };
+        const vote = value => async () => {
+            if (!user) {
+                location.href = `${link('login.html')}?next=${encodeURIComponent(location.pathname + location.search)}`;
+                return;
+            }
+            const next = c.myVote === value ? 0 : value;
+            try {
+                const r = await api.post(`/comments/${c.id}/vote`, {value: next});
+                c.score = r.score;
+                c.myVote = r.myVote;
+                paint();
+            } catch (e) {
+                toast(e.message);
+            }
+        };
+        up.addEventListener('click', vote(1));
+        down.addEventListener('click', vote(-1));
+        if (own) up.disabled = down.disabled = true;
+        paint();
+        return h('span', {class: 'vote-box'}, up, score, down);
+    };
+    // Comments with a very low score are folded away (one click shows them).
+    const buried = content => {
+        const box = h('span', {class: 'muted'}, h('em', {}, 'Hidden because of downvotes. '));
+        box.append(h('button', {class: 'link-button', onclick: () => box.replaceWith(content)}, 'Show'));
+        return box;
+    };
+    let sort = 'new';
+    const sortTabs = h('div', {class: 'tabs small-tabs comment-sort'});
+    const renderSort = () => sortTabs.replaceChildren(...[['new', 'Newest'], ['top', 'Top']].map(([k, label]) =>
+        h('button', {class: k === sort ? 'active' : '', onclick: () => {
+            sort = k;
+            renderSort();
+            load();
+        }}, label)));
+    renderSort();
     const load = async () => {
         try {
-            const {comments} = await api.get(`/projects/${project.id}/comments?limit=50`);
+            const {comments} = await api.get(`/projects/${project.id}/comments?limit=50&sort=${sort}`);
             const total = comments.reduce((n, c) => n + 1 + c.replies.length, 0);
             header.textContent = `Comments (${total})`;
             list.replaceChildren(...(comments.length ? comments.map(c => commentEl(c, true)) : [h('p', {class: 'muted'}, 'No comments yet.')]));
@@ -334,7 +387,7 @@ function renderComments (box, project, user, isOwner, isMod) {
             list.replaceChildren(errorNotice(e));
         }
     };
-    box.append(header);
+    box.append(h('div', {class: 'comments-head'}, header, sortTabs));
     if (user && (project.shared || isOwner)) box.append(composer(null, load));
     else if (!user) box.append(h('p', {class: 'muted'}, h('a', {href: `${link('login.html')}?next=${encodeURIComponent(location.pathname + location.search)}`}, 'Sign in'), ' to comment.'));
     box.append(list);

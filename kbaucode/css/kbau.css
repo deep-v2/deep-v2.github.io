@@ -307,7 +307,7 @@ textarea { resize: vertical; min-height: 90px; }
 .comment .head { display: flex; gap: 8px; align-items: baseline; font-size: 0.88rem; flex-wrap: wrap; }
 .comment .head a { font-weight: 800; color: var(--text); }
 .comment .text { white-space: pre-wrap; overflow-wrap: anywhere; margin: 2px 0 4px; }
-.comment .tools { display: flex; gap: 12px; font-size: 0.8rem; }
+.comment .tools { display: flex; gap: 12px; align-items: center; font-size: 0.8rem; flex-wrap: wrap; margin-top: 4px; }
 .comment .tools button { background: none; border: 0; color: var(--text-muted); cursor: pointer; padding: 0; font: inherit; font-weight: 700; }
 .comment .tools button:hover { color: var(--text); }
 .replies { margin-left: 40px; }
@@ -506,6 +506,19 @@ button.stat-tile:hover { border-color: var(--accent); }
 /* Pinned comment */
 .comment.pinned { background: color-mix(in srgb, var(--accent) 5%, transparent); border-radius: 12px; padding: 10px; margin: 0 -10px 10px; }
 .pinned-label { font-weight: 800; color: var(--text-muted); margin-bottom: 2px; }
+
+/* Comment votes */
+.comments-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.comments-head h2 { margin: 0; }
+.comment-sort { margin: 0; }
+.vote-box { display: inline-flex; align-items: center; gap: 2px; margin-right: 6px; padding: 1px 4px; border-radius: 999px; background: var(--surface-2); }
+.comment .tools .vote { padding: 2px 6px; font-size: 0.75rem; line-height: 1; color: var(--text-muted); border-radius: 999px; }
+.comment .tools .vote:hover:not(:disabled) { color: var(--text); background: var(--surface-3); }
+.comment .tools .vote:disabled { opacity: 0.35; cursor: default; }
+.comment .tools .vote.up.on { color: var(--accent); }
+.comment .tools .vote.down.on { color: var(--danger); }
+.vote-score { min-width: 1.6em; text-align: center; font-weight: 800; font-size: 0.8rem; color: var(--text); }
+.link-button { background: none; border: 0; padding: 0; color: var(--text); font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; }
 
 @media (max-width: 900px) {
     .project-layout { grid-template-columns: 1fr; }

@@ -135,6 +135,7 @@ export const createApi = ({db, blobs, apiPrefix = '/kbau-api', admins = [], firs
         content: c.hidden ? '' : c.content,
         pinned: !!c.pinned,
         hidden: !!c.hidden,
+        score: c.score || 0,
         author: {
             username: c.a_username,
             displayName: c.a_display_name || c.a_username,
@@ -637,17 +638,48 @@ export const createApi = ({db, blobs, apiPrefix = '/kbau-api', admins = [], firs
     // Comments
     route('GET', '/projects/:id/comments', async ctx => {
         const p = await getProject(ctx.params.id, ctx.user);
-        // The pinned comment (if any) always comes first.
+        // The pinned comment (if any) always comes first; then newest first, or highest score with sort=top.
+        const order = ctx.query.get('sort') === 'top' ? 'c.score DESC, c.created_at DESC' : 'c.created_at DESC';
         const top = await db.all(`${COMMENT_SELECT} WHERE c.project_id = ? AND c.parent_id IS NULL
-            ORDER BY c.pinned DESC, c.created_at DESC LIMIT ? OFFSET ?`, p.id, limitN(ctx), page(ctx) * limitN(ctx));
+            ORDER BY c.pinned DESC, ${order} LIMIT ? OFFSET ?`, p.id, limitN(ctx), page(ctx) * limitN(ctx));
         let replies = [];
         if (top.length) {
             replies = await db.all(`${COMMENT_SELECT} WHERE c.parent_id IN (${top.map(() => '?').join(',')}) ORDER BY c.created_at ASC`,
                 ...top.map(c => c.id));
         }
+        // The signed-in viewer's own votes, so the arrows show what they picked.
+        const myVotes = new Map();
+        const ids = [...top, ...replies].map(c => c.id);
+        if (ctx.user && ids.length) {
+            const rows = await db.all(`SELECT comment_id, value FROM comment_votes WHERE user_id = ? AND comment_id IN (${ids.map(() => '?').join(',')})`,
+                ctx.user.id, ...ids);
+            for (const r of rows) myVotes.set(r.comment_id, r.value);
+        }
+        const out = c => ({...commentOut(c), ...(ctx.user ? {myVote: myVotes.get(c.id) || 0} : {})});
         return {
-            comments: top.map(c => ({...commentOut(c), replies: replies.filter(r => r.parent_id === c.id).map(commentOut)}))
+            comments: top.map(c => ({...out(c), replies: replies.filter(r => r.parent_id === c.id).map(out)}))
         };
+    });
+    // Upvote (1), downvote (-1) or clear (0) a comment. One vote per person; you can't vote on your own.
+    route('POST', '/comments/:id/vote', async ctx => {
+        const user = requireUser(ctx);
+        await rateLimit(`vote:${user.id}`, 300, 3600_000);
+        const {value} = await ctx.json();
+        if (![1, -1, 0].includes(value)) throw new HttpError(400, 'value must be 1, -1 or 0');
+        const c = await db.get('SELECT * FROM comments WHERE id = ?', Number(ctx.params.id));
+        if (!c) throw new HttpError(404, 'Comment not found.');
+        await getProject(c.project_id, user);
+        if (c.author_id === user.id) throw new HttpError(400, "You can't vote on your own comment.");
+        if (c.hidden) throw new HttpError(400, 'This comment was removed.');
+        if (value === 0) {
+            await db.run('DELETE FROM comment_votes WHERE comment_id = ? AND user_id = ?', c.id, user.id);
+        } else {
+            await db.run(`INSERT INTO comment_votes (comment_id, user_id, value, created_at) VALUES (?, ?, ?, ?)
+                ON CONFLICT(comment_id, user_id) DO UPDATE SET value = excluded.value`, c.id, user.id, value, now());
+        }
+        await db.run('UPDATE comments SET score = (SELECT COALESCE(SUM(value), 0) FROM comment_votes WHERE comment_id = ?) WHERE id = ?', c.id, c.id);
+        const {score} = await db.get('SELECT score FROM comments WHERE id = ?', c.id);
+        return {score, myVote: value};
     });
     route('POST', '/projects/:id/comments', async ctx => {
         const user = requireUser(ctx);

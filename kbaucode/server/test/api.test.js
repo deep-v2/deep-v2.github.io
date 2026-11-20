@@ -320,6 +320,33 @@ test('pinned comments', async () => {
     assert.equal((await call('GET', `/projects/${projectId}/comments`)).body.comments.filter(c => c.pinned).length, 0);
 });
 
+test('comment upvotes and downvotes', async () => {
+    const c1 = (await call('POST', `/projects/${projectId}/comments`, {token: bob, json: {content: 'nice physics'}})).body.comment;
+    const c2 = (await call('POST', `/projects/${projectId}/comments`, {token: bob, json: {content: 'meh'}})).body.comment;
+    assert.equal(c1.score, 0);
+    assert.equal((await call('POST', `/comments/${c1.id}/vote`, {json: {value: 1}})).status, 401, 'must be signed in');
+    assert.equal((await call('POST', `/comments/${c1.id}/vote`, {token: bob, json: {value: 1}})).status, 400, 'no voting on your own');
+    assert.equal((await call('POST', `/comments/${c1.id}/vote`, {token: alice, json: {value: 5}})).status, 400);
+    let r = await call('POST', `/comments/${c1.id}/vote`, {token: alice, json: {value: 1}});
+    assert.deepEqual(r.body, {score: 1, myVote: 1});
+    r = await call('POST', `/comments/${c1.id}/vote`, {token: alice, json: {value: 1}});
+    assert.equal(r.body.score, 1, 'voting twice counts once');
+    r = await call('POST', `/comments/${c2.id}/vote`, {token: alice, json: {value: -1}});
+    assert.equal(r.body.score, -1);
+    // Viewers see their own vote; sort=top puts the best first (after any pinned comment).
+    let list = (await call('GET', `/projects/${projectId}/comments?sort=top`, {token: alice})).body.comments;
+    const nonPinned = list.filter(c => !c.pinned);
+    assert.equal(nonPinned[0].id, c1.id);
+    assert.equal(nonPinned[0].myVote, 1);
+    assert.equal(list.find(c => c.id === c2.id).myVote, -1);
+    assert.equal((await call('GET', `/projects/${projectId}/comments`)).body.comments[0].myVote, undefined);
+    // Switch and clear.
+    r = await call('POST', `/comments/${c1.id}/vote`, {token: alice, json: {value: -1}});
+    assert.equal(r.body.score, -1);
+    r = await call('POST', `/comments/${c1.id}/vote`, {token: alice, json: {value: 0}});
+    assert.deepEqual(r.body, {score: 0, myVote: 0});
+});
+
 test('bans with reasons, IP bans and the activity log', async () => {
     const dave = await call('POST', '/auth/register', {ip: '198.51.100.7', json: {username: 'dave', password: 'password123'}});
     assert.equal(dave.status, 200);
