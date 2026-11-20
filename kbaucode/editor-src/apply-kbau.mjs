@@ -84,7 +84,9 @@ edit('src/lib/brand.js', [["APP_NAME: 'TurboWarp'", "APP_NAME: 'KbauBlocks'"]]);
         ['favicon.png', 'static/favicon.png'],
         ['192.png', 'static/images/192.png'],
         ['512.png', 'static/images/512.png'],
-        ['apple-touch-icon.png', 'static/images/apple-touch-icon.png']
+        ['apple-touch-icon.png', 'static/images/apple-touch-icon.png'],
+        // TurboWarp's hook for a custom default project (empty upstream): the KbauBlocks starter project.
+        ['default-project.sb3', 'src/lib/default-project/override-default-project.sb3']
     ]) {
         const dest = path.join(gui, to);
         if (to !== 'static/favicon.png' && !fs.existsSync(dest)) {
@@ -185,7 +187,7 @@ edit('src/components/menu-bar/menu-bar.jsx', [
     ["import {APP_NAME} from '../../lib/brand.js';",
         `import {APP_NAME} from '../../lib/brand.js';
 import kbauLogo from './kbau-logo.png';
-import {KbauError, getKbauProjectInfo, saveToKbau, shareToKbau, siteUrl} from '../../lib/kbau-cloud.js';`],
+import {KbauError, getKbauProjectInfo, getToken, saveToKbau, shareToKbau, siteUrl} from '../../lib/kbau-cloud.js';`],
     ["            'handleClickSave',\n", "            'handleClickSave',\n            'handleClickKbauSave',\n            'handleClickKbauShare',\n"],
     // Know whether a project opened from KbauBlocks is already shared (Share button says "Shared").
     ["        document.addEventListener('keydown', this.handleKeyPress);\n    }\n", `        document.addEventListener('keydown', this.handleKeyPress);
@@ -194,32 +196,42 @@ import {KbauError, getKbauProjectInfo, saveToKbau, shareToKbau, siteUrl} from '.
         });
     }
 `],
-    // "See Project Page": for a project on KbauBlocks, open its KbauBlocks page (player, description, notes,
-    // comments, remixes), saving your changes first if it's yours. Otherwise keep TurboWarp's player mode.
+    // "See Project Page" always goes to the project's KbauBlocks page (player, description, notes, comments,
+    // remixes) in this tab. Your own project is saved first; a brand-new one is created on the server as an
+    // unshared project (only you can see it until you share it). Someone else's project just opens its page.
     [`    handleClickSeeCommunity (waitForUpdate) {
-`, `    handleClickSeeCommunity (waitForUpdate) {
+`, `    async handleClickSeeCommunity (waitForUpdate) {
+        if (this.state && this.state.kbauLeaving) return;
         const kbauId = new URLSearchParams(window.location.search).get('kbau_project');
-        if (kbauId) {
-            const pageUrl = siteUrl(\`project.html?id=\${encodeURIComponent(kbauId)}\`);
-            const tab = window.open('', '_blank');
-            const go = url => {
-                if (tab) tab.location.href = url;
-                else window.location.href = url;
-            };
-            if (!(this.state && this.state.kbauCanEdit)) {
-                go(pageUrl);
-                return;
-            }
-            saveToKbau(this.props.vm, this.props.projectTitle)
-                .then(result => go(result.url))
-                .catch(e => {
-                    if (tab) tab.close();
-                    // eslint-disable-next-line no-alert
-                    alert(\`Could not save to KbauBlocks: \${e.message}\`);
-                });
+        const info = kbauId ? await getKbauProjectInfo() : null;
+        if (kbauId && info && !info.canEdit) {
+            // eslint-disable-next-line no-alert
+            if (this.props.kbauProjectChanged && !window.confirm(
+                'Leave the editor? Your changes are not saved. (File → Save to KbauBlocks saves them as your remix.)')) return;
+            window.location.href = siteUrl(\`project.html?id=\${encodeURIComponent(kbauId)}\`);
             return;
         }
+        if (!getToken()) {
+            // eslint-disable-next-line no-alert
+            if (window.confirm('Sign in to KbauBlocks to give this project a page (it stays private until you share it). Open the sign-in page in a new tab?')) {
+                window.open(siteUrl('login.html'), '_blank');
+            }
+            return;
+        }
+        this.setState({kbauLeaving: true});
+        try {
+            const result = await saveToKbau(this.props.vm, this.props.projectTitle);
+            window.location.href = result.url;
+        } catch (e) {
+            this.setState({kbauLeaving: false});
+            // eslint-disable-next-line no-alert
+            alert(\`Could not save to KbauBlocks: \${e.message}\`);
+        }
+        return;
+        // eslint-disable-next-line no-unreachable
 `],
+    ['        isShowingProject: getIsShowingProject(loadingState),\n',
+        '        isShowingProject: getIsShowingProject(loadingState),\n        kbauProjectChanged: state.scratchGui.projectChanged,\n'],
     ['    handleClickSave () {\n', `    async handleClickKbauShare () {
         if (this.state && this.state.kbauSharing) return;
         // Open the tab now (inside the click) so pop-up blockers allow it; it's pointed at the page once saved.

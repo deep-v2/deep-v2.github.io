@@ -520,6 +520,10 @@ button.stat-tile:hover { border-color: var(--accent); }
 .vote-score { min-width: 1.6em; text-align: center; font-weight: 800; font-size: 0.8rem; color: var(--text); }
 .link-button { background: none; border: 0; padding: 0; color: var(--text); font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; }
 
+/* Project thumbnail editor */
+.thumb-editor { margin-top: 18px; }
+.thumb-preview { width: 120px; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 10px; background: var(--surface-3); border: 1px solid var(--border); flex: none; }
+
 @media (max-width: 900px) {
     .project-layout { grid-template-columns: 1fr; }
     .hero .blocks { display: none; }

@@ -1,4 +1,4 @@
-import {embedUrl} from '../api.js';
+import {embedUrl, imageUrl} from '../api.js';
 import {
     $, api, avatarEl, boot, editorUrl, errorNotice, fmt, h, link, modal, offlineNotice, param, projectGrid, timeAgo, toast,
     verifiedTick
@@ -183,7 +183,8 @@ function ownerPanel (project, isOwner, isMod) {
             panel.append(
                 h('p', {class: 'muted small', style: 'margin-top:0'}, 'Edit the title, Description and Notes above; they save automatically.'),
                 h('div', {class: 'row'}, shareButton(project, msg), h('span', {class: 'spacer'}),
-                    h('button', {class: 'btn danger', onclick: () => deleteProject(project)}, 'Delete')));
+                    h('button', {class: 'btn danger', onclick: () => deleteProject(project)}, 'Delete')),
+                thumbnailEditor(project));
             const versions = h('div', {class: 'small', style: 'margin-top:16px'});
             panel.append(h('h3', {style: 'margin-top:18px'}, 'Version history'), versions);
             api.get(`/projects/${project.id}/versions`).then(({versions: list}) => {
@@ -212,6 +213,62 @@ function ownerPanel (project, isOwner, isMod) {
     };
     render();
     return panel;
+}
+
+// Project thumbnail: upload your own image (kept when you save from the editor), or go back to the stage picture.
+function thumbnailEditor (project) {
+    const preview = h('img', {class: 'thumb-preview', alt: 'Current thumbnail'});
+    const showPreview = () => {
+        if (project.thumbnailUrl) imageUrl(project.thumbnailUrl).then(u => {
+            preview.src = u;
+        });
+        else preview.src = link('logo.png');
+    };
+    showPreview();
+    const input = h('input', {type: 'file', accept: 'image/png,image/jpeg,image/gif,image/webp', class: 'hidden'});
+    const status = h('div', {class: 'muted small'});
+    const note = () => (project.customThumbnail ?
+        'Your own image. Saving from the editor keeps it.' :
+        'Automatic: a picture of the stage, taken each time you save from the editor.');
+    const reset = h('button', {class: 'btn small ghost'}, 'Use the stage instead');
+    const paint = () => {
+        status.textContent = note();
+        reset.classList.toggle('hidden', !project.customThumbnail);
+    };
+    input.addEventListener('change', async () => {
+        const f = input.files[0];
+        input.value = '';
+        if (!f) return;
+        if (f.size > 2 * 1024 * 1024) return toast('That image is over 2 MB.');
+        const form = new FormData();
+        form.append('thumbnail', f, f.name);
+        status.textContent = 'Uploading…';
+        try {
+            ({project} = await api.upload('POST', `/projects/${project.id}/thumbnail`, form));
+            showPreview();
+            toast('Thumbnail updated');
+        } catch (e) {
+            toast(e.message);
+        }
+        paint();
+    });
+    reset.addEventListener('click', async () => {
+        try {
+            ({project} = await api.del(`/projects/${project.id}/thumbnail/custom`));
+            toast('The next save from the editor will use the stage');
+        } catch (e) {
+            toast(e.message);
+        }
+        paint();
+    });
+    paint();
+    return h('div', {class: 'thumb-editor'},
+        h('h3', {}, 'Thumbnail'),
+        h('div', {class: 'row', style: 'align-items:flex-start;flex-wrap:nowrap'}, preview,
+            h('div', {style: 'flex:1;min-width:0'}, status,
+                h('div', {class: 'row', style: 'margin-top:8px'},
+                    h('button', {class: 'btn small', onclick: () => input.click()}, 'Upload image'), reset, input),
+                h('div', {class: 'muted small', style: 'margin-top:6px'}, 'PNG, JPEG, GIF or WebP, up to 2 MB. 4:3 looks best.'))));
 }
 
 function shareButton (project, msg) {

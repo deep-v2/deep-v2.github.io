@@ -1,4 +1,4 @@
-import {apiUrl} from '../api.js';
+import {apiUrl, imageUrl} from '../api.js';
 import {$, api, boot, editorUrl, errorNotice, h, link, modal, offlineNotice, timeAgo, toast} from '../ui.js';
 
 const main = $('#main');
@@ -41,7 +41,7 @@ async function renderProjects (body, user) {
         const thumb = h('div', {class: 'thumb'});
         if (p.thumbnailUrl) {
             const img = h('img', {alt: ''});
-            apiUrl(p.thumbnailUrl).then(u => {
+            (p.shared ? apiUrl : imageUrl)(p.thumbnailUrl).then(u => {
                 img.src = u;
             });
             thumb.append(img);

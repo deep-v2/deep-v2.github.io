@@ -1,6 +1,6 @@
 // Shared KbauBlocks website UI: header, footer, cards, toasts, modals. AGPL-3.0-or-later.
 import {
-    api, apiUrl, editorUrl, getCachedUser, refreshMe, serverAvailable, signOut, siteRoot
+    api, apiUrl, editorUrl, getCachedUser, imageUrl, refreshMe, serverAvailable, signOut, siteRoot
 } from './api.js';
 
 export const $ = (sel, root = document) => root.querySelector(sel);
@@ -101,7 +101,8 @@ export const projectCard = project => {
     const img = h('img', {alt: '', loading: 'lazy'});
     const thumb = h('div', {class: 'thumb'});
     if (project.thumbnailUrl) {
-        apiUrl(project.thumbnailUrl).then(u => {
+        // Unshared projects' thumbnails need your sign-in, so they're fetched with the token.
+        (project.shared ? apiUrl : imageUrl)(project.thumbnailUrl).then(u => {
             img.src = u;
         });
         thumb.append(img);

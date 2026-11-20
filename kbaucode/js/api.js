@@ -99,6 +99,23 @@ export const apiUrl = async p => {
     return `${await getApiBase()}${p}`;
 };
 
+/**
+ * URL for an image served by the API. When signed in, the image is fetched with your token (as a blob URL),
+ * so thumbnails of your own unshared projects show up too; a plain <img src> can't send the token.
+ */
+export const imageUrl = async p => {
+    const url = await apiUrl(p);
+    const token = getToken();
+    if (!url || !token) return url;
+    try {
+        const res = await fetch(url, {headers: {Authorization: `Bearer ${token}`}});
+        if (!res.ok) return url;
+        return URL.createObjectURL(await res.blob());
+    } catch (e) {
+        return url;
+    }
+};
+
 export const request = async (method, path, body, {form = false} = {}) => {
     const base = await getApiBase();
     if (!base) throw new ApiError(0, 'No KbauBlocks server is configured.');

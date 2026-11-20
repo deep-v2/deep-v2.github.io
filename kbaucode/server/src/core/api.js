@@ -33,6 +33,7 @@ export const imageType = b => {
     if (b.length > 8 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return 'image/png';
     if (b.length > 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return 'image/jpeg';
     if (b.length > 12 && ascii(b, 0, 4) === 'RIFF' && ascii(b, 8, 12) === 'WEBP') return 'image/webp';
+    if (b.length > 6 && (ascii(b, 0, 6) === 'GIF87a' || ascii(b, 0, 6) === 'GIF89a')) return 'image/gif';
     return null;
 };
 const likeEscape = s => s.replace(/[\\%_]/g, c => `\\${c}`);
@@ -100,6 +101,7 @@ export const createApi = ({db, blobs, apiPrefix = '/kbau-api', admins = [], firs
         } : null,
         version: p.current_version,
         thumbnailUrl: p.has_thumbnail ? `/projects/${p.id}/thumbnail?v=${p.has_thumbnail}` : null,
+        customThumbnail: !!p.custom_thumbnail,
         sb3Url: `/projects/${p.id}/sb3?v=${p.current_version}`,
         stats: {
             views: p.view_count,
@@ -518,12 +520,14 @@ export const createApi = ({db, blobs, apiPrefix = '/kbau-api', admins = [], firs
         const thumbType = thumb && imageType(thumb);
         const title = clampText(form.get('title') || undefined, 100, 'title');
         await checkText(ctx, [[title, 'project title']]);
-        // Claim the next version number atomically, then store the file.
+        // Claim the next version number atomically, then store the file. The editor's stage snapshot only
+        // replaces the thumbnail if the owner hasn't uploaded their own.
         const claimed = await db.get(`UPDATE projects SET current_version = current_version + 1, updated_at = ?,
-            title = COALESCE(?, title), has_thumbnail = CASE WHEN ? THEN has_thumbnail + 1 ELSE has_thumbnail END
-            WHERE id = ? RETURNING current_version`, now(), title ? title.trim() || null : null, thumbType ? 1 : 0, p.id);
+            title = COALESCE(?, title),
+            has_thumbnail = CASE WHEN ? AND custom_thumbnail = 0 THEN has_thumbnail + 1 ELSE has_thumbnail END
+            WHERE id = ? RETURNING current_version, custom_thumbnail`, now(), title ? title.trim() || null : null, thumbType ? 1 : 0, p.id);
         await storeSb3(p.id, claimed.current_version, sb3);
-        if (thumbType) await blobs.put(`thumbnails/${p.id}`, thumb, thumbType);
+        if (thumbType && !claimed.custom_thumbnail) await blobs.put(`thumbnails/${p.id}`, thumb, thumbType);
         return {project: await projectWithViewer(await loadProject(p.id), user)};
     });
     route('GET', '/projects/:id', async ctx => ({project: await projectWithViewer(await getProject(ctx.params.id, ctx.user), ctx.user)}));
@@ -586,9 +590,17 @@ export const createApi = ({db, blobs, apiPrefix = '/kbau-api', admins = [], firs
         const {file} = await readUploads(ctx);
         const bytes = await file('thumbnail', MAX_IMAGE);
         const type = bytes && imageType(bytes);
-        if (!type) throw new HttpError(400, 'Upload a PNG, JPEG or WebP image.');
+        if (!type) throw new HttpError(400, 'Upload a PNG, JPEG, GIF or WebP image (up to 2 MB).');
         await blobs.put(`thumbnails/${p.id}`, bytes, type);
-        await db.run('UPDATE projects SET has_thumbnail = has_thumbnail + 1 WHERE id = ?', p.id);
+        // An uploaded thumbnail is "custom": later editor saves won't replace it with a stage snapshot.
+        await db.run('UPDATE projects SET has_thumbnail = has_thumbnail + 1, custom_thumbnail = 1 WHERE id = ?', p.id);
+        return {project: await projectWithViewer(await loadProject(p.id), user)};
+    });
+    // Go back to automatic thumbnails (the stage, taken on the next save from the editor).
+    route('DELETE', '/projects/:id/thumbnail/custom', async ctx => {
+        const user = requireUser(ctx);
+        const p = await getOwnProject(ctx.params.id, user);
+        await db.run('UPDATE projects SET custom_thumbnail = 0 WHERE id = ?', p.id);
         return {project: await projectWithViewer(await loadProject(p.id), user)};
     });
     route('GET', '/projects/:id/versions', async ctx => {

@@ -347,6 +347,36 @@ test('comment upvotes and downvotes', async () => {
     assert.deepEqual(r.body, {score: 0, myVote: 0});
 });
 
+test('custom project thumbnails survive editor saves', async () => {
+    const GIF = Buffer.from('474946383961010001000000002c00000000010001000002', 'hex');
+    const id = (await call('POST', '/projects', {token: bob, form: projectForm('Thumb Test')})).body.project.id;
+    const upload = (bytes, token = bob) => {
+        const f = new FormData();
+        f.append('thumbnail', new Blob([bytes]), 'thumb');
+        return call('POST', `/projects/${id}/thumbnail`, {token, form: f});
+    };
+    assert.equal((await upload(Buffer.from('not an image'))).status, 400);
+    assert.equal((await upload(GIF, alice)).status, 403, 'only the owner sets the thumbnail');
+    let r = await upload(GIF);
+    assert.equal(r.status, 200);
+    assert.equal(r.body.project.customThumbnail, true);
+    const thumbType = async () => {
+        const res = await fetch(`${base}/projects/${id}/thumbnail?x=${Math.random()}`, {headers: {Authorization: `Bearer ${bob}`}});
+        return res.headers.get('content-type');
+    };
+    assert.equal(await thumbType(), 'image/gif');
+    // Saving from the editor (which sends a stage snapshot) keeps the custom thumbnail.
+    r = await call('PUT', `/projects/${id}/content`, {token: bob, form: projectForm('Thumb Test')});
+    assert.equal(r.status, 200);
+    assert.equal(await thumbType(), 'image/gif');
+    // Back to automatic: the next save uses the stage snapshot again.
+    r = await call('DELETE', `/projects/${id}/thumbnail/custom`, {token: bob});
+    assert.equal(r.body.project.customThumbnail, false);
+    await call('PUT', `/projects/${id}/content`, {token: bob, form: projectForm('Thumb Test')});
+    assert.equal(await thumbType(), 'image/png');
+    await call('DELETE', `/projects/${id}`, {token: bob});
+});
+
 test('bans with reasons, IP bans and the activity log', async () => {
     const dave = await call('POST', '/auth/register', {ip: '198.51.100.7', json: {username: 'dave', password: 'password123'}});
     assert.equal(dave.status, 200);
