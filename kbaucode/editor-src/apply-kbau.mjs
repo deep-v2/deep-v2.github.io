@@ -437,6 +437,157 @@ console.log('[kbau] patched src/components/menu-bar/menu-bar.css');
     console.log(`[kbau] white accent overrides in ${Object.keys(onAccent).length + 1} stylesheets`);
 }
 
+// 4d. Look like the website: Nunito font, pill buttons, search-style title box, rounded menus.
+// The menu bar is solid black in every theme, so these colours are fixed (same values as css/kbau.css).
+{
+    // Nunito for the editor UI. Stage overlays (monitors, ask prompt) keep Scratch's font so projects look the same.
+    const fontLink = '<link rel="preconnect" href="https://fonts.googleapis.com">\n' +
+        '    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n' +
+        '    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap">';
+    edit('src/playground/index.ejs', [['    <link rel="apple-touch-icon"', `    ${fontLink}\n    <link rel="apple-touch-icon"`]]);
+    const helvetica = '"Helvetica Neue", Helvetica, Arial, sans-serif';
+    const keepScratchFont = new Set(['src/components/monitor/monitor.css', 'src/components/question/question.css']);
+    let fontFiles = 0;
+    const walk = dir => {
+        for (const entry of fs.readdirSync(dir, {withFileTypes: true})) {
+            const p = path.join(dir, entry.name);
+            const rel = path.relative(gui, p).split(path.sep).join('/');
+            if (entry.isDirectory()) {
+                if (rel !== 'src/addons/addons') walk(p);
+            } else if (entry.name.endsWith('.css') && !keepScratchFont.has(rel)) {
+                const text = fs.readFileSync(p, 'utf8');
+                if (text.includes(helvetica)) {
+                    fs.writeFileSync(p, text.split(helvetica).join(`"Nunito", ${helvetica}`));
+                    fontFiles++;
+                }
+            }
+        }
+    };
+    walk(path.join(gui, 'src'));
+    if (fontFiles < 20) {
+        console.error(`[kbau] Nunito: only ${fontFiles} stylesheets had the GUI font`);
+        failures++;
+    }
+    console.log(`[kbau] Nunito font in ${fontFiles} stylesheets`);
+
+    fs.appendFileSync(path.join(gui, 'src/components/menu-bar/menu-bar.css'), `
+/* KbauBlocks: menu bar like the website header */
+.menu-bar {
+    border-bottom: 1px solid #1a1a1a;
+}
+/* Rounded hover highlight (like the site's nav links) instead of a full-height block */
+.menu-bar-item.hoverable:hover,
+.menu-bar-item.active {
+    background-color: transparent;
+}
+.menu-bar-item.hoverable:hover::before,
+.menu-bar-item.active::before {
+    content: "";
+    position: absolute;
+    inset: 0.45rem 0;
+    border-radius: 8px;
+    background-color: #1c1c1c;
+    z-index: -1;
+}
+/* Pill buttons (site .btn inside the header) */
+.menu-bar-button,
+.feedback-button {
+    height: 2.125rem;
+    padding: 0 0.95rem;
+    border-radius: 999px;
+    border: 1px solid #2a2a2a;
+    background-color: #161616;
+    color: #ffffff;
+    font-weight: 800;
+    box-shadow: none;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.menu-bar-button:hover,
+.feedback-button:hover {
+    background-color: #222222;
+    border-color: #333333;
+}
+.menu-bar-button:active,
+.feedback-button:active {
+    transform: translateY(1px);
+}
+.remix-button {
+    background-color: #161616;
+}
+/* Share is the primary action: white pill, black text (site .btn.primary) */
+.menu-bar-button.kbau-share {
+    background-color: #ffffff;
+    border-color: #ffffff;
+    color: #000000;
+}
+.menu-bar-button.kbau-share:hover {
+    background-color: #d4d4d4;
+    border-color: #d4d4d4;
+}
+`);
+    fs.appendFileSync(path.join(gui, 'src/components/menu-bar/share-button.css'), `
+/* KbauBlocks: once shared, the button is a plain dark pill */
+.share-button.share-button-is-shared {
+    background-color: #161616 !important;
+    border-color: #2a2a2a !important;
+    color: #ffffff !important;
+}
+`);
+    fs.appendFileSync(path.join(gui, 'src/components/menu-bar/community-button.css'), `
+/* KbauBlocks: border comes from the pill style */
+.community-button {
+    box-shadow: none;
+}
+`);
+    fs.appendFileSync(path.join(gui, 'src/components/menu-bar/project-title-input.css'), `
+/* KbauBlocks: project title looks like the site's search box */
+.title-field {
+    border: 1px solid #262626;
+    border-radius: 999px;
+    background-color: #141414;
+    color: #ffffff;
+    padding: 0.5rem 0.9rem;
+    font-size: 0.85rem;
+    font-weight: 700;
+}
+.title-field:hover {
+    background-color: #181818;
+    border-color: #3a3a3a;
+}
+.title-field:focus {
+    border: 1px solid #3a3a3a;
+    box-shadow: none;
+    background-color: #181818;
+    color: #ffffff;
+}
+`);
+    fs.appendFileSync(path.join(gui, 'src/components/menu/menu.css'), `
+/* KbauBlocks: dropdowns like the site's menus */
+.menu {
+    border: 1px solid #2a2a2a;
+    border-radius: 0 0 12px 12px;
+    padding: 4px;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+}
+.menu-item {
+    border-radius: 8px;
+    font-size: 0.8rem;
+}
+.menu-item.active,
+.menu-item:hover,
+.menu-item.expanded {
+    background-color: #1c1c1c;
+}
+.menu-section {
+    border-top-color: #2a2a2a;
+}
+.submenu {
+    border-radius: 12px;
+}
+`);
+    console.log('[kbau] website look for menu bar, buttons, title and menus');
+}
+
 // 4b. Load projects from the KbauBlocks server with ?kbau_project=<id>, and use that id for cloud variables.
 edit('src/lib/project-fetcher-hoc.jsx', [
     ["import storage from './storage';", "import storage from './storage';\nimport {fetchKbauProject} from './kbau-cloud.js';"],
