@@ -183,11 +183,13 @@ const attachSearchSuggest = (form, input) => {
         }
         const item = (href, icon, ...label) => h('a', {class: 'suggest-item', role: 'option', href}, icon, h('span', {class: 'suggest-label'}, ...label));
         const icon = svg => h('span', {class: 'suggest-icon', html: svg});
-        box.replaceChildren(
+        // (replaceChildren would print a null as the text "null", so leave the user row out entirely.)
+        box.replaceChildren(...[
             exactUser ? item(link('user.html', {u: exactUser.username}), avatarEl(exactUser, 'sm'),
                 h('b', {}, userName(exactUser)), h('span', {class: 'muted small'}, ` @${exactUser.username}`)) : null,
             item(link('explore.html', {q: term, type: 'users'}), icon(USER_ICON), 'Search users ', h('span', {class: 'muted'}, `“${term}”`)),
-            item(link('explore.html', {q: term, type: 'projects'}), icon(SEARCH_ICON), 'Search projects ', h('span', {class: 'muted'}, `“${term}”`)));
+            item(link('explore.html', {q: term, type: 'projects'}), icon(SEARCH_ICON), 'Search projects ', h('span', {class: 'muted'}, `“${term}”`))
+        ].filter(Boolean));
         box.classList.remove('hidden');
         active = -1;
     };
