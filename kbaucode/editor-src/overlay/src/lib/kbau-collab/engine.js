@@ -25,12 +25,15 @@ const REMOTE_GROUP = 'kbau-remote-';
 const BATCH_DELAY_MS = 25;
 const STRUCTURE_CHECK_MS = 300;
 const SUM_EVERY_MS = 20 * 1000;
-const AUTOSAVE_MS = 4 * 60 * 1000;
+const AUTOSAVE_MS = 3 * 60 * 1000;
 const IDLE_LEAVE_MS = 30 * 60 * 1000;
 const MAX_INLINE_OP = 600 * 1024;
 const MAX_BATCH = 800 * 1024;
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+// Blockly fires the events of a workspace reload on a timer; switching sprites again before they fire would
+// let the VM file them under the wrong sprite. Wait for them before switching back.
+const settle = () => sleep(50);
 const randomId = () => Math.random().toString(36)
     .slice(2, 10);
 
@@ -353,6 +356,12 @@ export class CollabEngine {
      */
     push (op, ready = null) {
         this.dirtySinceSave = true;
+        // An edit that names a sprite must come after that sprite's pending rename/add, so detect those now.
+        if (op.tg !== undefined && this.structureTimer) {
+            clearTimeout(this.structureTimer);
+            this.structureTimer = null;
+            this.checkStructure();
+        }
         // Consecutive property updates of one sprite (stage dragging) collapse into one.
         if (op.k === 'info') {
             const last = this.outbox[this.outbox.length - 1];
@@ -605,9 +614,9 @@ export class CollabEngine {
                 }
                 this.lastSeq = item.s;
                 this.dirtySinceSave = true;
-                // What we just applied is in sync by definition.
-                this.resetBaseline([...touched].filter(Boolean));
+                // What we just applied is in sync by definition ('*' = sprites were added, removed or reordered).
                 if (touched.has('*')) this.resetBaseline();
+                else if (touched.size) this.resetBaseline([...touched]);
             }
         } finally {
             this.processing = false;
@@ -881,8 +890,12 @@ export class CollabEngine {
             added.getSounds().forEach((s, i) => op.ids.s[i] && assetIds.set(s, op.ids.s[i]));
             touched.add(added);
         }
-        // Adding a sprite selects it; put the person back where they were.
-        if (previous && this.runtime.getTargetById(previous)) this.vm.setEditingTarget(previous);
+        // Adding a sprite selects it; put the person back where they were (after the reload's events have fired).
+        await settle();
+        if (previous && this.runtime.getTargetById(previous) && this.vm.editingTarget && this.vm.editingTarget.id !== previous) {
+            this.vm.setEditingTarget(previous);
+            await settle();
+        }
         touched.add('*');
     }
 
@@ -1046,9 +1059,13 @@ export class CollabEngine {
                 t.getCostumes().forEach((c, i) => entry.c[i] && assetIds.set(c, entry.c[i]));
                 t.getSounds().forEach((s, i) => entry.s[i] && assetIds.set(s, entry.s[i]));
             }
+            await settle();
             if (previous !== undefined) {
                 const t = this.targetByKey(previous);
-                if (t) this.vm.setEditingTarget(t.id);
+                if (t && t !== this.vm.editingTarget) {
+                    this.vm.setEditingTarget(t.id);
+                    await settle();
+                }
             }
             this.resetBaseline();
         } finally {
@@ -1342,6 +1359,11 @@ export class CollabEngine {
 
 const engines = new WeakMap();
 export const getCollabEngine = vm => {
-    if (!engines.has(vm)) engines.set(vm, new CollabEngine(vm));
+    if (!engines.has(vm)) {
+        const engine = new CollabEngine(vm);
+        engines.set(vm, engine);
+        // Handy from the browser console when debugging a session.
+        window.kbauCollab = engine;
+    }
     return engines.get(vm);
 };

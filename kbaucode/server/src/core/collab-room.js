@@ -101,7 +101,7 @@ export class CollabRoom {
         if (!this.session) {
             this.session = {
                 id: randomId(), seq: 0, seeded: false, seeder: conn, snapRev: null, prevSnapRev: null,
-                log: [], logBytes: 0, floor: 0, seen: new Map(), sums: new Map(), snapReq: null, snapReqAt: 0
+                log: [], logBytes: 0, sinceCount: 0, sinceBytes: 0, floor: 0, seen: new Map(), sums: new Map(), snapReq: null, snapReqAt: 0
             };
             this._send(conn, {t: 'welcome', mode: 'seed', session: this.session.id, you: this._public(m), members: []});
         } else if (!this.session.seeded) {
@@ -168,6 +168,8 @@ export class CollabRoom {
             const entry = {s: seq, text: JSON.stringify({t: 'ops', s: seq, u: m.cid, ops: msg.ops})};
             s.log.push(entry);
             s.logBytes += entry.text.length;
+            s.sinceCount++;
+            s.sinceBytes += entry.text.length;
             if (c) {
                 s.seen.set(dedupe, seq);
                 if (s.seen.size > 5000) s.seen.delete(s.seen.keys().next().value);
@@ -205,6 +207,9 @@ export class CollabRoom {
             s.floor = s.prevSnapRev;
             s.log = s.log.filter(e => e.s > s.floor);
             s.logBytes = s.log.reduce((n, e) => n + e.text.length, 0);
+            const since = s.log.filter(e => e.s > rev);
+            s.sinceCount = since.length;
+            s.sinceBytes = since.reduce((n, e) => n + e.text.length, 0);
             s.snapReq = null;
             if (dropped !== null && dropped !== s.prevSnapRev) this.deleteSnapshot(s.id, dropped).catch(() => {});
             return;
@@ -251,8 +256,8 @@ export class CollabRoom {
     _maybeCompact () {
         const s = this.session;
         if (!s || !s.seeded) return;
-        const since = s.log.filter(e => e.s > s.snapRev);
-        if (since.length < COMPACT_COUNT && s.logBytes < COMPACT_BYTES) return;
+        // Counters, not a log scan: this runs on every edit.
+        if (s.sinceCount < COMPACT_COUNT && s.sinceBytes < COMPACT_BYTES) return;
         if (s.snapReq && this.conns.has(s.snapReq) && this.now() - s.snapReqAt < SNAPSHOT_TIMEOUT_MS) return;
         const host = this._host();
         if (!host) return;

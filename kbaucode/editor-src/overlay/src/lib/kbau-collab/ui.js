@@ -197,8 +197,9 @@ export const mountCollab = (root, getProps) => {
             info = info || null;
         }
     };
-    const pollStatus = async () => {
-        if (destroyed || document.hidden || engine.status !== 'off') return;
+    const pollStatus = async (first = false) => {
+        // Background tabs don't poll (except the first check, so opening a project in a new tab still joins).
+        if (destroyed || (document.hidden && !first) || engine.status !== 'off') return;
         await loadInfo();
         render();
         // Opening a project someone is already editing live joins them (unless you have unsaved changes of your own).
@@ -326,7 +327,7 @@ export const mountCollab = (root, getProps) => {
                     if (others.length && getProps().projectChanged &&
                         // eslint-disable-next-line no-alert
                         !window.confirm('Joining loads the live project and replaces your unsaved changes in this editor. Join anyway?')) return;
-                    engine.start(id);
+                    engine.start(projectId());
                 }}, others.length ? 'Join live session' : 'Start live session'));
         }
         if (s !== 'live') {
@@ -374,7 +375,23 @@ export const mountCollab = (root, getProps) => {
                     e.target.disabled = false;
                 }}, 'Save now'),
                 h('span', {style: {flex: 1}}),
-                h('button', {class: 'kbau-collab-pbtn', type: 'button', onclick: () => engine.stop()}, 'Leave session')));
+                h('button', {class: 'kbau-collab-pbtn', type: 'button', onclick: async e => {
+                    // The session ends with the last person: save their work first so nothing is lost.
+                    if (!engine.members.size && engine.dirtySinceSave) {
+                        e.target.disabled = true;
+                        e.target.textContent = 'Saving…';
+                        try {
+                            await engine.save();
+                            toast('Saved to KbauBlocks', '#51cf66');
+                        } catch (err) {
+                            toast(`Could not save: ${err.message}`, '#ff6b6b');
+                            e.target.disabled = false;
+                            e.target.textContent = 'Leave session';
+                            return;
+                        }
+                    }
+                    engine.stop();
+                }}, 'Leave session')));
     };
 
     const peopleSection = () => {
@@ -530,12 +547,17 @@ export const mountCollab = (root, getProps) => {
         render();
     });
     const poll = setInterval(pollStatus, STATUS_POLL_MS);
-    pollStatus();
+    const onVisible = () => {
+        if (!document.hidden) pollStatus();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    pollStatus(true);
     render();
 
     return () => {
         destroyed = true;
         clearInterval(poll);
+        document.removeEventListener('visibilitychange', onVisible);
         unsubscribe();
         document.removeEventListener('pointerdown', outside, true);
         panel.remove();
