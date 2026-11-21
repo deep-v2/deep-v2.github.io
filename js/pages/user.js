@@ -52,12 +52,13 @@ const main = $('#main');
             const r = rel.following ?
                 await api.del(`/users/${encodeURIComponent(user.username)}/follow`) :
                 await api.post(`/users/${encodeURIComponent(user.username)}/follow`);
-            rel = r.relationship;
+            rel = {...rel, ...r.relationship};
             followersCount.textContent = fmt(r.followers);
             stats.friends += (rel.friends ? 1 : 0) - (wasFriends ? 1 : 0);
             friendsCount.textContent = fmt(stats.friends);
             if (rel.friends && !wasFriends) toast(`You and ${user.displayName} are now friends!`);
             renderFollow();
+            renderNickname();
         } catch (e) {
             toast(e.message);
         } finally {
@@ -66,6 +67,51 @@ const main = $('#main');
     });
     renderFollow();
 
+    // Private nickname (friends only; only you see it) and blocking.
+    const nicknameLine = h('div', {class: 'muted small', style: 'margin-top:2px'});
+    const nicknameBtn = h('button', {class: 'btn ghost small', type: 'button'});
+    const renderNickname = () => {
+        nicknameLine.replaceChildren(rel.nickname ? `You call them “${rel.nickname}” · only you can see this` : '');
+        nicknameLine.hidden = !rel.nickname;
+        nicknameBtn.textContent = rel.nickname ? 'Edit nickname' : 'Nickname';
+        nicknameBtn.hidden = !rel.friends && !rel.nickname;
+    };
+    nicknameBtn.addEventListener('click', async () => {
+        const input = h('input', {type: 'text', maxlength: 32, value: rel.nickname || '', placeholder: user.displayName});
+        const value = await modal(`Nickname for ${user.displayName}`, [
+            h('p', {class: 'muted small', style: 'margin-top:0'}, 'Only you can see this. It replaces their name in your chats and friends list.'),
+            input
+        ], [{label: 'Cancel', value: null}, rel.nickname ? {label: 'Remove', value: ''} : null, {label: 'Save', value: 'save', class: 'primary'}].filter(Boolean));
+        if (value === null) return;
+        try {
+            const r = await api.put(`/users/${encodeURIComponent(user.username)}/nickname`, {nickname: value === 'save' ? input.value : ''});
+            rel.nickname = r.nickname;
+            renderNickname();
+            toast(r.nickname ? 'Nickname saved' : 'Nickname removed');
+        } catch (e) {
+            toast(e.message);
+        }
+    });
+    const blockBtn = h('button', {class: `btn ghost small${rel.blocked ? '' : ' danger'}`, type: 'button'}, rel.blocked ? 'Unblock' : 'Block');
+    blockBtn.addEventListener('click', async () => {
+        if (!rel.blocked) {
+            const ok = await modal(`Block ${user.displayName}?`, [h('ul', {class: 'muted', style: 'margin:0;padding-left:18px;line-height:1.6'},
+                h('li', {}, 'You won\'t be able to message each other.'),
+                h('li', {}, 'You\'ll stop following each other, and they can\'t follow you.'),
+                h('li', {}, 'Their comments are hidden for you, and they can\'t comment on your projects.'),
+                h('li', {}, 'They aren\'t told. You can unblock them any time.'))],
+            [{label: 'Cancel', value: false}, {label: 'Block', value: true, class: 'danger'}]);
+            if (!ok) return;
+        }
+        try {
+            await (rel.blocked ? api.del : api.post)(`/users/${encodeURIComponent(user.username)}/block`);
+            location.reload();
+        } catch (e) {
+            toast(e.message);
+        }
+    });
+    renderNickname();
+
     main.append(h('div', {class: 'card', style: 'padding:0;overflow:hidden'},
         profileBanner(user),
         h('div', {class: 'profile-head'}, avatarEl(user, 'lg'),
@@ -73,10 +119,14 @@ const main = $('#main');
                 h('h1', {style: 'margin:0'}, user.displayName, verifiedTick(user),
                     user.role !== 'user' ? h('span', {class: 'badge accent', style: 'margin-left:8px'}, user.role) : null,
                     user.banned ? h('span', {class: 'badge warn', style: 'margin-left:8px'}, 'suspended') : null),
-                h('div', {class: 'muted'}, `@${user.username} · joined ${timeAgo(user.createdAt)}`, me && !isMe ? followsYou : null)),
+                h('div', {class: 'muted'}, `@${user.username} · joined ${timeAgo(user.createdAt)}`, me && !isMe ? followsYou : null),
+                me && !isMe ? nicknameLine : null),
             h('div', {class: 'row', style: 'padding-bottom:10px'},
                 isMe ? h('a', {class: 'btn', href: link('settings')}, 'Edit profile') : null,
-                !isMe && !user.banned ? followBtn : null,
+                !isMe && !user.banned && !rel.blocked ? followBtn : null,
+                me && !isMe && !user.banned && !rel.blocked ? h('a', {class: 'btn', href: link('messages', {u: user.username})}, 'Message') : null,
+                me && !isMe ? nicknameBtn : null,
+                me && !isMe ? blockBtn : null,
                 isAdmin && !isMe && !isStaff ? h('button', {class: 'btn ghost small', onclick: async () => {
                     try {
                         await api.post(`/admin/users/${encodeURIComponent(user.username)}/${user.verified ? 'unverify' : 'verify'}`);

@@ -86,7 +86,12 @@ function reportCard (r, refresh) {
     if (!r.target) target = h('span', {class: 'muted'}, '(target no longer exists)');
     else if (r.targetType === 'project') target = h('a', {href: link('project', {id: r.target.id})}, `Project “${r.target.title}” by ${r.target.owner}`, r.target.hidden ? ' (hidden)' : '');
     else if (r.targetType === 'comment') target = h('div', {}, `Comment by ${r.target.author.username} on `, h('a', {href: link('project', {id: r.target.projectId})}, `project ${r.target.projectId}`), h('blockquote', {class: 'prose quote'}, r.target.content));
-    else target = h('a', {href: link('user', {u: r.target.username})}, `User @${r.target.username}`, r.target.banned ? ' (banned)' : '');
+    else if (r.targetType === 'message') {
+        // Only the reported message is shown, never the rest of the private chat.
+        target = h('div', {}, 'Direct message from ', h('a', {href: link('user', {u: r.target.sender})}, `@${r.target.sender}`),
+            r.target.deleted ? ' (unsent by the sender)' : r.target.hidden ? ' (hidden)' : '',
+            h('blockquote', {class: 'prose quote'}, r.target.content));
+    } else target = h('a', {href: link('user', {u: r.target.username})}, `User @${r.target.username}`, r.target.banned ? ' (banned)' : '');
     const note = h('input', {type: 'text', placeholder: 'Note — also used as the ban reason', maxlength: 1000});
     const act = action => async () => {
         try {

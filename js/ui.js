@@ -88,8 +88,9 @@ export const verifiedTick = user => {
         '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="seal" d="M12 1.5l2.6 2.1 3.3-.4 1.2 3.1 3.1 1.2-.4 3.3 2.1 2.6-2.1 2.6.4 3.3-3.1 1.2-1.2 3.1-3.3-.4L12 22.5l-2.6-2.1-3.3.4-1.2-3.1-3.1-1.2.4-3.3L.1 12l2.1-2.6-.4-3.3 3.1-1.2 1.2-3.1 3.3.4z"/>' +
         '<path class="check" d="M7.5 12.4l3 3 6-6.3" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>'});
 };
-export const userName = (user, attrs = {}) => h('span', {class: 'user-name', ...attrs},
-    user.displayName || user.username, verifiedTick(user));
+// Your private nickname for a friend wins over their display name (only you see it).
+export const userName = (user, attrs = {}) => h('span', {class: 'user-name', title: user.nickname ? `${user.displayName || user.username} (your nickname for them)` : null, ...attrs},
+    user.nickname || user.displayName || user.username, verifiedTick(user));
 
 export const userGrid = (users, emptyText = 'Nobody here yet.') => (users.length ?
     h('div', {class: 'user-grid'}, users.map(u => h('a', {class: 'user-card card', href: link('user', {u: u.username})},
@@ -258,6 +259,7 @@ export const renderHeader = async active => {
             const menu = h('div', {class: 'dropdown-menu hidden'},
                 h('a', {href: link('user', {u: user.username})}, 'Profile'),
                 h('a', {href: link('mystuff')}, 'My Stuff'),
+                h('a', {href: link('messages')}, 'Messages'),
                 h('a', {href: link('settings')}, 'Settings'),
                 (user.role === 'admin' || user.role === 'moderator') ? h('a', {href: link('admin')}, 'Admin') : null,
                 h('button', {onclick: async () => {
@@ -269,7 +271,7 @@ export const renderHeader = async active => {
                 menu.classList.toggle('hidden');
             }}, avatarEl(user, 'sm'), h('span', {class: 'small'}, user.username));
             document.addEventListener('click', () => menu.classList.add('hidden'));
-            right.append(h('a', {class: 'btn small', href: link('mystuff')}, 'My Stuff'), h('div', {class: 'dropdown'}, chip, menu));
+            right.append(messagesButton(active), h('a', {class: 'btn small', href: link('mystuff')}, 'My Stuff'), h('div', {class: 'dropdown'}, chip, menu));
         } else {
             const next = encodeURIComponent(location.pathname + location.search);
             right.append(
@@ -285,7 +287,44 @@ export const renderHeader = async active => {
     }
     const user = await refreshMe();
     renderRight(user);
+    if (user) startMessageBadge();
     return user;
+};
+
+// ---------- Messages button + unread badge ----------
+const CHAT_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.6A8 8 0 1 1 21 12z"/></svg>';
+let badgeEls = [];
+let badgeTimer = null;
+const messagesButton = active => {
+    const badge = h('span', {class: 'msg-badge', hidden: true});
+    badgeEls.push(badge);
+    return h('a', {class: `msg-button${active === 'messages' ? ' active' : ''}`, href: link('messages'), 'aria-label': 'Messages', title: 'Messages', html: CHAT_ICON}, badge);
+};
+/** Re-check unread messages and requests now (the Messages page calls this after reading a chat). */
+export const refreshMessageBadge = async () => {
+    try {
+        const {unread, requests} = await api.get('/messages/unread');
+        const n = unread + requests;
+        for (const b of badgeEls) {
+            b.hidden = !n;
+            b.textContent = n > 9 ? '9+' : String(n);
+            b.parentElement && b.parentElement.setAttribute('aria-label', n ? `Messages (${n} new)` : 'Messages');
+        }
+        document.title = document.title.replace(/^\(\d+\+?\) /, '');
+        if (n) document.title = `(${n > 9 ? '9+' : n}) ${document.title}`;
+    } catch (e) {
+        // offline or signed out: leave the badge as it is
+    }
+};
+const startMessageBadge = () => {
+    refreshMessageBadge();
+    clearInterval(badgeTimer);
+    badgeTimer = setInterval(() => {
+        if (!document.hidden) refreshMessageBadge();
+    }, 30000);
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) refreshMessageBadge();
+    });
 };
 
 export const renderFooter = () => {

@@ -1,6 +1,6 @@
 import {apiUrl, getApiBase, getApiOverride, setApiOverride, signOut, siteRoot, updateCachedUser} from '../api.js';
 import {cropImage, IMAGE_TYPES, isImageFile} from '../image-tools.js';
-import {$, api, boot, errorNotice, getSiteTheme, h, link, param, setSiteTheme, toast} from '../ui.js';
+import {$, api, avatarEl, boot, errorNotice, getSiteTheme, h, link, param, setSiteTheme, toast} from '../ui.js';
 
 const main = $('#main');
 const DEFAULT_AVATAR = new URL('default-avatar.png', siteRoot).href;
@@ -13,6 +13,7 @@ const DEFAULT_AVATAR = new URL('default-avatar.png', siteRoot).href;
     const available = [
         user ? ['profile', 'Profile'] : null,
         user ? ['account', 'Account'] : null,
+        user ? ['privacy', 'Privacy'] : null,
         ['appearance', 'Appearance'],
         ['server', 'Server']
     ].filter(Boolean);
@@ -21,6 +22,7 @@ const DEFAULT_AVATAR = new URL('default-avatar.png', siteRoot).href;
         body.replaceChildren();
         if (tab === 'profile') profile(body, user);
         if (tab === 'account') account(body, user);
+        if (tab === 'privacy') privacy(body);
         if (tab === 'appearance') appearance(body);
         if (tab === 'server') server(body, online);
     };
@@ -313,6 +315,79 @@ function profile (body, user) {
 function cameraIcon () {
     return h('span', {class: 'pe-icon', 'aria-hidden': 'true', html:
         '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3.5"/></svg>'});
+}
+
+const LIMIT_PRESETS = [[0, 'Friends only'], [1, '1'], [3, '3'], [5, '5'], [10, '10'], [20, '20']];
+
+async function privacy (body) {
+    body.append(h('p', {class: 'muted'}, 'Loading…'));
+    let data;
+    try {
+        data = await api.get('/users/me/privacy');
+    } catch (e) {
+        body.replaceChildren(errorNotice(e));
+        return;
+    }
+    let limit = data.dmRequestLimit;
+    const presets = h('div', {class: 'privacy-limit', role: 'radiogroup', 'aria-label': 'Message request limit'});
+    const custom = h('input', {type: 'number', min: 0, max: data.maxRequestLimit, value: limit, id: 'dm-limit', style: 'width:90px'});
+    const summary = h('div', {class: 'notice'});
+    const render = () => {
+        presets.replaceChildren(...LIMIT_PRESETS.map(([n, label]) => h('button', {
+            type: 'button', class: `btn small${n === limit ? ' on' : ''}`, role: 'radio', 'aria-checked': String(n === limit),
+            onclick: () => save(n)
+        }, label)));
+        custom.value = String(limit);
+        summary.textContent = limit === 0 ?
+            'Only friends can message you. Anyone else is told that you only get messages from friends.' :
+            `People who aren't your friends can send you ${limit} message${limit === 1 ? '' : 's'} as a request. ` +
+            'They\'re told how many they have left, and that they need to wait once they reach it. Accept the request (or reply) to chat normally.';
+    };
+    const save = async n => {
+        if (!Number.isInteger(n) || n < 0 || n > data.maxRequestLimit) {
+            toast(`Pick a number from 0 to ${data.maxRequestLimit}.`);
+            render();
+            return;
+        }
+        try {
+            limit = (await api.patch('/users/me/privacy', {dmRequestLimit: n})).dmRequestLimit;
+            render();
+            toast('Saved');
+        } catch (e) {
+            toast(e.message);
+        }
+    };
+    custom.addEventListener('change', () => save(Number(custom.value)));
+
+    const blockedList = h('div');
+    const renderBlocked = () => {
+        blockedList.replaceChildren(...(data.blocked.length ? data.blocked.map(u => h('div', {class: 'blocked-row'},
+            avatarEl(u, 'sm'),
+            h('a', {href: link('user', {u: u.username}), style: 'flex:1;min-width:0'}, h('b', {}, u.displayName), h('span', {class: 'muted small'}, ` @${u.username}`)),
+            h('button', {class: 'btn small', type: 'button', onclick: async () => {
+                try {
+                    await api.del(`/users/${encodeURIComponent(u.username)}/block`);
+                    data.blocked = data.blocked.filter(x => x.id !== u.id);
+                    renderBlocked();
+                    toast(`${u.displayName} is unblocked`);
+                } catch (e) {
+                    toast(e.message);
+                }
+            }}, 'Unblock'))) : [h('p', {class: 'muted small'}, 'You haven\'t blocked anyone.')]));
+    };
+    body.replaceChildren(
+        h('h3', {style: 'margin-top:0'}, 'Message requests'),
+        h('p', {class: 'muted small'},
+            'Friends (people who follow each other) can always message you. Anyone else starts a message request. ',
+            'Choose how many messages they can send before you accept it.'),
+        presets,
+        h('div', {class: 'row', style: 'margin:4px 0 12px'}, h('label', {for: 'dm-limit', style: 'margin:0'}, 'Or a custom number (0–20):'), custom),
+        summary,
+        h('h3', {}, 'Blocked people'),
+        h('p', {class: 'muted small'}, 'Blocked people can\'t message you, follow you or comment on your projects, and you don\'t see their comments. They aren\'t told.'),
+        blockedList);
+    render();
+    renderBlocked();
 }
 
 function account (body, user) {

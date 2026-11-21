@@ -7,11 +7,13 @@ import {
     SESSION_TTL_MS, USERNAME_RE, hashPassword, hashToken, newToken, sha256Hex, validatePassword, verifyPassword
 } from './auth.js';
 import {BUILT_IN_WORD_COUNT, createFilter} from './filter.js';
+import {registerMessaging} from './messages.js';
 
 export class HttpError extends Error {
-    constructor (status, message) {
+    constructor (status, message, code) {
         super(message);
         this.status = status;
+        this.code = code;
     }
 }
 
@@ -380,7 +382,11 @@ export const createApi = ({db, blobs, apiPrefix = '/kbau-api', admins = [], firs
                 JOIN users x ON x.id = a.followee_id WHERE a.follower_id = ? AND x.banned = 0) AS friends`,
         u.id, u.id, u.id, u.id, u.id, u.id, u.id);
         const out = {user: userOut(u), stats};
-        if (ctx.user && ctx.user.id !== u.id) out.relationship = await relationship(ctx.user.id, u.id);
+        if (ctx.user && ctx.user.id !== u.id) {
+            const blocks = await messaging.blockState(ctx.user.id, u.id);
+            out.relationship = {...await relationship(ctx.user.id, u.id), blocked: blocks.byMe,
+                nickname: await messaging.nicknameOf(ctx.user.id, u.id)};
+        }
         return out;
     });
 
@@ -398,6 +404,9 @@ export const createApi = ({db, blobs, apiPrefix = '/kbau-api', admins = [], firs
         if (target.id === me.id) throw new HttpError(400, 'You cannot follow yourself.');
         if (on) {
             if (target.banned) throw new HttpError(404, 'User not found.');
+            const blocks = await messaging.blockState(me.id, target.id);
+            if (blocks.byMe) throw new HttpError(403, 'You blocked this user. Unblock them first.');
+            if (blocks.byThem) throw new HttpError(403, 'You can\'t follow this user.');
             await rateLimit(`follow:${me.id}`, 200, 3600_000);
             await db.run('INSERT INTO follows (follower_id, followee_id, created_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING',
                 me.id, target.id, now());
@@ -414,7 +423,7 @@ export const createApi = ({db, blobs, apiPrefix = '/kbau-api', admins = [], firs
         const u = await getUserByName(ctx.params.username);
         const rows = await db.all(`${sql} AND x.banned = 0 ORDER BY f.created_at DESC LIMIT ? OFFSET ?`,
             u.id, limitN(ctx), page(ctx) * limitN(ctx));
-        return {users: rows.map(userOut)};
+        return {users: await messaging.withNicknames(ctx.user && ctx.user.id, rows.map(userOut))};
     };
     route('GET', '/users/:username/followers', userList(
         'SELECT x.*, f.created_at AS f_created FROM follows f JOIN users x ON x.id = f.follower_id WHERE f.followee_id = ?'));
@@ -495,6 +504,11 @@ export const createApi = ({db, blobs, apiPrefix = '/kbau-api', admins = [], firs
         await db.run('UPDATE users SET password_hash = ? WHERE id = ?', await hashPassword(newPassword), user.id);
         await db.run('DELETE FROM sessions WHERE user_id = ? AND token_hash != ?', user.id, await hashToken(ctx.token));
         return {ok: true};
+    });
+
+    // Direct messages, requests, pins, blocks, nicknames (messages.js)
+    const messaging = registerMessaging({
+        route, db, HttpError, now, requireUser, getUserByName, userOut, rateLimit, checkText, clampText, relationship
     });
 
     // Projects
@@ -683,8 +697,10 @@ export const createApi = ({db, blobs, apiPrefix = '/kbau-api', admins = [], firs
             for (const r of rows) myVotes.set(r.comment_id, r.value);
         }
         const out = c => ({...commentOut(c), ...(ctx.user ? {myVote: myVotes.get(c.id) || 0} : {})});
+        const blocked = new Set(ctx.user ? (await db.all('SELECT blocked_id FROM blocks WHERE blocker_id = ?', ctx.user.id)).map(r => r.blocked_id) : []);
+        const visible = c => !blocked.has(c.author_id);
         return {
-            comments: top.map(c => ({...out(c), replies: replies.filter(r => r.parent_id === c.id).map(out)}))
+            comments: top.filter(visible).map(c => ({...out(c), replies: replies.filter(r => r.parent_id === c.id && visible(r)).map(out)}))
         };
     });
     // Upvote (1), downvote (-1) or clear (0) a comment. One vote per person; you can't vote on your own.
@@ -713,6 +729,9 @@ export const createApi = ({db, blobs, apiPrefix = '/kbau-api', admins = [], firs
         await rateLimit(`comment:${user.id}`, 10, 60_000);
         const p = await getProject(ctx.params.id, user);
         if (!p.shared && p.owner_id !== user.id) throw new HttpError(403, 'Comments are closed.');
+        if (p.owner_id !== user.id && (await messaging.blockState(user.id, p.owner_id)).byThem) {
+            throw new HttpError(403, 'You can\'t comment on this project.');
+        }
         const {content, parentId} = await ctx.json();
         const text = clampText(content, 500, 'content');
         if (!text || !text.trim()) throw new HttpError(400, 'Write something first.');
@@ -879,7 +898,7 @@ export const createApi = ({db, blobs, apiPrefix = '/kbau-api', admins = [], firs
         const user = requireUser(ctx);
         await rateLimit(`report:${user.id}`, 20, 3600_000);
         const {targetType, targetId, reason} = await ctx.json();
-        if (!['project', 'comment', 'user'].includes(targetType)) throw new HttpError(400, 'Unknown report type.');
+        if (!['project', 'comment', 'user', 'message'].includes(targetType)) throw new HttpError(400, 'Unknown report type.');
         const text = clampText(reason, 1000, 'reason');
         if (!text || !text.trim()) throw new HttpError(400, 'Tell us what is wrong.');
         await checkText(ctx, [[text, 'report']]);
@@ -888,6 +907,11 @@ export const createApi = ({db, blobs, apiPrefix = '/kbau-api', admins = [], firs
             throw new HttpError(404, 'Comment not found.');
         }
         if (targetType === 'user') await getUserByName(targetId);
+        if (targetType === 'message' && !(await db.get(`SELECT 1 AS x FROM messages m
+            JOIN conversation_members cm ON cm.conversation_id = m.conversation_id AND cm.user_id = ?
+            WHERE m.id = ? AND m.sender_id != ?`, user.id, Number(targetId), user.id))) {
+            throw new HttpError(404, 'Message not found.');
+        }
         await db.run('INSERT INTO reports (reporter_id, target_type, target_id, reason, created_at) VALUES (?, ?, ?, ?, ?)',
             user.id, targetType, String(targetId), text.trim(), now());
         ctx.status = 201;
@@ -907,6 +931,11 @@ export const createApi = ({db, blobs, apiPrefix = '/kbau-api', admins = [], firs
             } else if (r.target_type === 'comment') {
                 const c = await db.get(`${COMMENT_SELECT} WHERE c.id = ?`, Number(r.target_id));
                 target = c && {...commentOut(c), content: c.content};
+            } else if (r.target_type === 'message') {
+                // Moderators see only the reported message, not the rest of the chat.
+                const m = await db.get(`SELECT m.*, u.username AS sender FROM messages m JOIN users u ON u.id = m.sender_id
+                    WHERE m.id = ?`, Number(r.target_id));
+                target = m && {id: m.id, sender: m.sender, content: m.body, deleted: !!m.deleted, hidden: !!m.hidden, createdAt: m.created_at};
             } else {
                 target = userOut(await db.get('SELECT * FROM users WHERE username = ?', r.target_id));
             }
@@ -959,6 +988,7 @@ export const createApi = ({db, blobs, apiPrefix = '/kbau-api', admins = [], firs
         if (action === 'hide') {
             if (r.target_type === 'project') await db.run('UPDATE projects SET hidden = 1 WHERE id = ?', Number(r.target_id));
             else if (r.target_type === 'comment') await db.run('UPDATE comments SET hidden = 1 WHERE id = ?', Number(r.target_id));
+            else if (r.target_type === 'message') await db.run('UPDATE messages SET hidden = 1 WHERE id = ?', Number(r.target_id));
             else throw new HttpError(400, 'Users cannot be hidden; use ban.');
         }
         if (action === 'ban') {
@@ -966,6 +996,7 @@ export const createApi = ({db, blobs, apiPrefix = '/kbau-api', admins = [], firs
             if (r.target_type === 'user') row = await db.get('SELECT id AS uid FROM users WHERE username = ?', r.target_id);
             if (r.target_type === 'project') row = await db.get('SELECT owner_id AS uid FROM projects WHERE id = ?', Number(r.target_id));
             if (r.target_type === 'comment') row = await db.get('SELECT author_id AS uid FROM comments WHERE id = ?', Number(r.target_id));
+            if (r.target_type === 'message') row = await db.get('SELECT sender_id AS uid FROM messages WHERE id = ?', Number(r.target_id));
             if (row) await banUser(ctx, row.uid, noteText || `Report #${r.id}: ${r.reason}`);
         }
         await db.run('UPDATE reports SET status = ?, resolved_by = ?, resolution_note = ?, resolved_at = ? WHERE id = ?',
@@ -1238,7 +1269,7 @@ export const createApi = ({db, blobs, apiPrefix = '/kbau-api', admins = [], firs
             if (result instanceof Response) return result;
             return json(ctx.status, result);
         } catch (e) {
-            if (e instanceof HttpError) return json(e.status, {error: e.message});
+            if (e instanceof HttpError) return json(e.status, e.code ? {error: e.message, code: e.code} : {error: e.message});
             console.error(e);
             return json(500, {error: 'Internal server error.'});
         }

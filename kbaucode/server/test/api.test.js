@@ -237,7 +237,7 @@ test('follows, friends and the verified tick', async () => {
     r = await call('POST', '/users/carol/follow', {token: bob});
     assert.equal(r.body.followers, 1, 'following twice is a no-op');
     r = await call('GET', '/users/bob', {token: carol});
-    assert.deepEqual(r.body.relationship, {following: false, followedBy: true, friends: false});
+    assert.deepEqual(r.body.relationship, {following: false, followedBy: true, friends: false, blocked: false, nickname: null});
     // Follow back: friends.
     r = await call('POST', '/users/bob/follow', {token: carol});
     assert.equal(r.body.relationship.friends, true);
@@ -522,4 +522,124 @@ test('delete project', async () => {
     assert.equal((await call('DELETE', `/projects/${projectId}`, {token: bob})).status, 403);
     assert.equal((await call('DELETE', `/projects/${projectId}`, {token: alice})).status, 200);
     assert.equal((await call('GET', `/projects/${projectId}`)).status, 404);
+});
+
+test('direct messages, requests, pins, blocking and nicknames', async () => {
+    const reg = async (username, ip) => (await call('POST', '/auth/register', {ip, json: {username, password: 'password123'}})).body.token;
+    const erin = await reg('dm_erin', '192.0.2.11');
+    const frank = await reg('dm_frank', '192.0.2.12');
+    const gina = await reg('dm_gina', '192.0.2.13');
+    const say = (token, to, body) => call('POST', `/messages/with/${to}`, {token, json: {body}});
+
+    // Erin lets non-friends send 2 messages before she accepts.
+    assert.equal((await call('PATCH', '/users/me/privacy', {token: erin, json: {dmRequestLimit: 99}})).status, 400);
+    assert.equal((await call('PATCH', '/users/me/privacy', {token: erin, json: {dmRequestLimit: 2}})).body.dmRequestLimit, 2);
+    let r = await call('GET', '/messages/with/dm_erin', {token: frank});
+    assert.equal(r.body.state.status, 'none');
+    assert.equal(r.body.state.remaining, 2);
+    assert.match(r.body.state.notice, /message request/, 'the sender is told it is a request');
+    assert.equal((await say(frank, 'dm_frank', 'me')).status, 400, 'no messaging yourself');
+    r = await say(frank, 'dm_erin', 'hi erin');
+    assert.equal(r.status, 201);
+    assert.equal(r.body.state.status, 'request-sent');
+    assert.equal(r.body.state.remaining, 1);
+    r = await say(frank, 'dm_erin', 'are you there?');
+    assert.equal(r.body.state.canSend, false);
+    assert.equal(r.body.state.reason, 'limit');
+    r = await say(frank, 'dm_erin', 'hello??');
+    assert.equal(r.status, 403);
+    assert.equal(r.body.code, 'limit');
+    assert.match(r.body.error, /accepted your message request/);
+
+    // Erin sees a request, not a chat, and Frank can't see whether she read it.
+    assert.equal((await call('GET', '/messages/conversations', {token: erin})).body.conversations.length, 0);
+    r = await call('GET', '/messages/conversations?box=requests', {token: erin});
+    assert.equal(r.body.conversations.length, 1);
+    assert.equal(r.body.conversations[0].user.username, 'dm_frank');
+    assert.deepEqual((await call('GET', '/messages/unread', {token: erin})).body, {unread: 0, requests: 1});
+    r = await call('GET', '/messages/with/dm_frank', {token: erin});
+    assert.deepEqual(r.body.messages.map(m => m.body), ['hi erin', 'are you there?']);
+    assert.equal(r.body.state.status, 'request-received');
+    await call('POST', '/messages/with/dm_frank/read', {token: erin});
+    assert.equal((await call('GET', '/messages/with/dm_erin', {token: frank})).body.state.otherLastReadId, 0);
+
+    // Accepting lets Frank write freely; read receipts now show.
+    r = await call('POST', '/messages/with/dm_frank/accept', {token: erin});
+    assert.equal(r.body.state.status, 'accepted');
+    r = await say(frank, 'dm_erin', 'thanks!');
+    assert.equal(r.status, 201);
+    const lastId = r.body.message.id;
+    assert.equal((await call('GET', '/messages/unread', {token: erin})).body.unread, 1);
+    await call('POST', '/messages/with/dm_frank/read', {token: erin});
+    assert.equal((await call('GET', '/messages/with/dm_erin', {token: frank})).body.state.otherLastReadId, lastId);
+    r = await call('GET', `/messages/with/dm_frank?after=${lastId - 1}`, {token: erin});
+    assert.deepEqual(r.body.messages.map(m => m.body), ['thanks!']);
+
+    // Pins.
+    await say(gina, 'dm_erin', 'hey');
+    await call('POST', '/messages/with/dm_gina/accept', {token: erin});
+    await call('PUT', '/messages/with/dm_frank/pin', {token: erin});
+    r = await call('GET', '/messages/conversations', {token: erin});
+    assert.deepEqual(r.body.conversations.map(c => [c.user.username, c.pinned]), [['dm_frank', true], ['dm_gina', false]]);
+
+    // Unsend, and reports on messages (only on other people's messages in your own chats).
+    r = await call('DELETE', `/messages/${lastId}`, {token: erin});
+    assert.equal(r.status, 404, 'only the sender can unsend');
+    r = await call('DELETE', `/messages/${lastId}`, {token: frank});
+    assert.equal(r.body.message.deleted, true);
+    const firstId = (await call('GET', '/messages/with/dm_frank', {token: erin})).body.messages[0].id;
+    assert.equal((await call('POST', '/reports', {token: frank, json: {targetType: 'message', targetId: firstId, reason: 'x'}})).status, 404);
+    assert.equal((await call('POST', '/reports', {token: gina, json: {targetType: 'message', targetId: firstId, reason: 'x'}})).status, 404);
+    assert.equal((await call('POST', '/reports', {token: erin, json: {targetType: 'message', targetId: firstId, reason: 'rude'}})).status, 201);
+    const report = (await call('GET', '/admin/reports', {token: alice})).body.reports.find(x => x.targetType === 'message');
+    assert.equal(report.target.content, 'hi erin');
+
+    // Nicknames: friends only, and only the person who set it sees it.
+    assert.equal((await call('PUT', '/users/dm_frank/nickname', {token: erin, json: {nickname: 'Franky'}})).status, 403);
+    await call('POST', '/users/dm_frank/follow', {token: erin});
+    await call('POST', '/users/dm_erin/follow', {token: frank});
+    assert.equal((await call('PUT', '/users/dm_frank/nickname', {token: erin, json: {nickname: 'Franky'}})).body.nickname, 'Franky');
+    assert.equal((await call('GET', '/users/dm_frank', {token: erin})).body.relationship.nickname, 'Franky');
+    assert.equal((await call('GET', '/users/dm_erin/friends', {token: erin})).body.users[0].nickname, 'Franky');
+    assert.equal((await call('GET', '/users/dm_erin/friends', {token: frank})).body.users[0].nickname, undefined);
+    assert.equal((await call('GET', '/messages/conversations', {token: erin})).body.conversations[0].user.nickname, 'Franky');
+
+    // Friends-only setting; friends can always chat.
+    await call('PATCH', '/users/me/privacy', {token: erin, json: {dmRequestLimit: 0}});
+    const hank = await reg('dm_hank', '192.0.2.14');
+    r = await say(hank, 'dm_erin', 'hi');
+    assert.equal(r.body.code, 'friends-only');
+    await call('POST', '/users/dm_erin/follow', {token: hank});
+    await call('POST', '/users/dm_hank/follow', {token: erin});
+    r = await say(hank, 'dm_erin', 'now we are friends');
+    assert.equal(r.status, 201);
+    assert.equal(r.body.state.status, 'accepted');
+
+    // Declining: the sender just can't send more.
+    await call('PATCH', '/users/me/privacy', {token: erin, json: {dmRequestLimit: 5}});
+    const ivy = await reg('dm_ivy', '192.0.2.15');
+    await say(ivy, 'dm_erin', 'buy my stuff');
+    r = await call('POST', '/messages/with/dm_ivy/decline', {token: erin});
+    assert.equal(r.body.state.status, 'declined');
+    assert.equal((await call('GET', '/messages/conversations?box=requests', {token: erin})).body.conversations.length, 0);
+    r = await say(ivy, 'dm_erin', 'hello?');
+    assert.equal(r.status, 403);
+    assert.equal(r.body.code, 'limit', 'a decline looks like a full request to the sender');
+
+    // Blocking: removes follows both ways, stops messages and follows, hides the chat and their comments.
+    r = await call('POST', '/users/dm_frank/block', {token: erin});
+    assert.equal(r.body.relationship.friends, false);
+    assert.equal((await call('GET', '/users/dm_frank', {token: erin})).body.relationship.blocked, true);
+    assert.equal((await say(frank, 'dm_erin', 'hey')).body.code, 'unavailable');
+    assert.equal((await say(erin, 'dm_frank', 'hey')).body.code, 'blocked');
+    assert.equal((await call('POST', '/users/dm_erin/follow', {token: frank})).status, 403);
+    assert.ok(!(await call('GET', '/messages/conversations', {token: erin})).body.conversations.some(c => c.user.username === 'dm_frank'));
+    const pid = (await call('POST', '/projects', {token: erin, form: projectForm('Erin Game', {shared: '1'})})).body.project.id;
+    await call('POST', `/projects/${pid}/share`, {token: erin});
+    assert.equal((await call('POST', `/projects/${pid}/comments`, {token: frank, json: {content: 'nice'}})).status, 403);
+    r = await call('GET', '/users/me/privacy', {token: erin});
+    assert.deepEqual(r.body.blocked.map(u => u.username), ['dm_frank']);
+    await call('DELETE', '/users/dm_frank/block', {token: erin});
+    assert.equal((await call('GET', '/users/me/privacy', {token: erin})).body.blocked.length, 0);
+    assert.equal((await say(frank, 'dm_erin', 'hi again')).status, 201, 'an accepted chat keeps working after unblocking');
 });
