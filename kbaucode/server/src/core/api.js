@@ -18,6 +18,8 @@ export class HttpError extends Error {
 const now = () => Date.now();
 export const MAX_SB3 = 50 * 1024 * 1024;
 export const MAX_IMAGE = 2 * 1024 * 1024;
+// Profile pictures and banners can be animated GIFs, which are bigger.
+export const MAX_PROFILE_IMAGE = 8 * 1024 * 1024;
 const PAGE_SIZE = 24;
 const SHARED = 'p.shared = 1 AND p.hidden = 0 AND p.deleted = 0';
 
@@ -75,7 +77,8 @@ export const createApi = ({db, blobs, apiPrefix = '/kbau-api', admins = [], firs
         bio: u.bio,
         workingOn: u.working_on,
         profileColor: u.profile_color,
-        avatarUrl: u.has_avatar ? `/users/${encodeURIComponent(u.username)}/avatar?v=${u.has_avatar}` : null,
+        avatarUrl: u.has_avatar > 0 ? `/users/${encodeURIComponent(u.username)}/avatar?v=${u.has_avatar}` : null,
+        bannerUrl: u.has_banner > 0 ? `/users/${encodeURIComponent(u.username)}/banner?v=${u.has_banner}` : null,
         role: u.role,
         verified: isVerified(u),
         banned: !!u.banned,
@@ -143,7 +146,7 @@ export const createApi = ({db, blobs, apiPrefix = '/kbau-api', admins = [], firs
             displayName: c.a_display_name || c.a_username,
             profileColor: c.a_profile_color,
             verified: isVerified({verified: c.a_verified, role: c.a_role}),
-            avatarUrl: c.a_has_avatar ? `/users/${encodeURIComponent(c.a_username)}/avatar?v=${c.a_has_avatar}` : null
+            avatarUrl: c.a_has_avatar > 0 ? `/users/${encodeURIComponent(c.a_username)}/avatar?v=${c.a_has_avatar}` : null
         },
         createdAt: c.created_at
     });
@@ -421,11 +424,13 @@ export const createApi = ({db, blobs, apiPrefix = '/kbau-api', admins = [], firs
     route('GET', '/users/:username/friends', userList(`SELECT x.* FROM follows a
         JOIN follows f ON f.follower_id = a.followee_id AND f.followee_id = a.follower_id
         JOIN users x ON x.id = a.followee_id WHERE a.follower_id = ?`));
-    route('GET', '/users/:username/avatar', async ctx => {
-        const u = await getUserByName(ctx.params.username);
-        if (!u.has_avatar) throw new HttpError(404, 'No avatar.');
-        return fileResponse(`avatars/${u.id}`, 'public, max-age=86400', 'image/png');
-    });
+    for (const kind of ['avatar', 'banner']) {
+        route('GET', `/users/:username/${kind}`, async ctx => {
+            const u = await getUserByName(ctx.params.username);
+            if (!(u[`has_${kind}`] > 0)) throw new HttpError(404, `No ${kind}.`);
+            return fileResponse(`${kind}s/${u.id}`, 'public, max-age=86400', 'image/png');
+        });
+    }
     route('GET', '/users/:username/projects', async ctx => {
         const u = await getUserByName(ctx.params.username);
         const all = ctx.user && ctx.user.id === u.id && ctx.query.get('all') === '1';
@@ -459,17 +464,27 @@ export const createApi = ({db, blobs, apiPrefix = '/kbau-api', admins = [], firs
         displayName ?? null, bio ?? null, workingOn ?? null, color ?? null, user.id);
         return {user: userOut(await db.get('SELECT * FROM users WHERE id = ?', user.id))};
     });
-    route('POST', '/users/me/avatar', async ctx => {
-        const user = requireUser(ctx);
-        await rateLimit(`avatar:${user.id}`, 10, 3600_000);
-        const {file} = await readUploads(ctx);
-        const bytes = await file('avatar', MAX_IMAGE);
-        const type = bytes && imageType(bytes);
-        if (!type) throw new HttpError(400, 'Upload a PNG, JPEG or WebP image.');
-        await blobs.put(`avatars/${user.id}`, bytes, type);
-        await db.run('UPDATE users SET has_avatar = has_avatar + 1 WHERE id = ?', user.id);
-        return {user: userOut(await db.get('SELECT * FROM users WHERE id = ?', user.id))};
-    });
+    // Profile picture and banner: PNG, JPEG, WebP or (animated) GIF. The site crops them before uploading.
+    // DELETE removes one; the upload counter is kept (negated) so a later upload gets a fresh URL.
+    for (const kind of ['avatar', 'banner']) {
+        const col = `has_${kind}`;
+        route('POST', `/users/me/${kind}`, async ctx => {
+            const user = requireUser(ctx);
+            await rateLimit(`${kind}:${user.id}`, 20, 3600_000);
+            const {file} = await readUploads(ctx);
+            const bytes = await file(kind, MAX_PROFILE_IMAGE);
+            const type = bytes && imageType(bytes);
+            if (!type) throw new HttpError(400, 'Upload a PNG, JPEG, WebP or GIF image (up to 8 MB).');
+            await blobs.put(`${kind}s/${user.id}`, bytes, type);
+            await db.run(`UPDATE users SET ${col} = ABS(${col}) + 1 WHERE id = ?`, user.id);
+            return {user: userOut(await db.get('SELECT * FROM users WHERE id = ?', user.id))};
+        });
+        route('DELETE', `/users/me/${kind}`, async ctx => {
+            const user = requireUser(ctx);
+            await db.run(`UPDATE users SET ${col} = -ABS(${col}) WHERE id = ?`, user.id);
+            return {user: userOut(await db.get('SELECT * FROM users WHERE id = ?', user.id))};
+        });
+    }
     route('POST', '/users/me/password', async ctx => {
         const user = requireUser(ctx);
         const {currentPassword, newPassword} = await ctx.json();

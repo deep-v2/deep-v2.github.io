@@ -67,7 +67,7 @@ const main = $('#main');
     renderFollow();
 
     main.append(h('div', {class: 'card', style: 'padding:0;overflow:hidden'},
-        h('div', {class: 'profile-banner', style: `background:linear-gradient(120deg, ${user.profileColor}, #000)`}),
+        profileBanner(user),
         h('div', {class: 'profile-head'}, avatarEl(user, 'lg'),
             h('div', {style: 'padding-bottom:6px;flex:1;min-width:200px'},
                 h('h1', {style: 'margin:0'}, user.displayName, verifiedTick(user),
@@ -176,4 +176,22 @@ async function report (username) {
     } catch (e) {
         toast(e.message);
     }
+}
+
+// Banner: the uploaded image (can be an animated GIF), or a gradient from the profile colour.
+function profileBanner (user) {
+    const el = h('div', {class: 'profile-banner', style: `background:linear-gradient(120deg, ${user.profileColor}, #000)`});
+    if (user.bannerUrl) {
+        el.classList.add('has-image');
+        const img = h('img', {class: 'banner-img', alt: ''});
+        img.addEventListener('error', () => {
+            img.remove();
+            el.classList.remove('has-image');
+        });
+        apiUrlSafe(user.bannerUrl).then(u => {
+            img.src = u;
+        });
+        el.append(img);
+    }
+    return el;
 }

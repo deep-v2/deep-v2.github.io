@@ -377,6 +377,33 @@ test('custom project thumbnails survive editor saves', async () => {
     await call('DELETE', `/projects/${id}`, {token: bob});
 });
 
+test('animated profile pictures and banners', async () => {
+    const GIF = Buffer.from('474946383961010001000000002c00000000010001000002', 'hex');
+    const send = (kind, bytes) => {
+        const f = new FormData();
+        f.append(kind, new Blob([bytes]), kind);
+        return call('POST', `/users/me/${kind}`, {token: bob, form: f});
+    };
+    const type = async url => (await fetch(`${base}${url}`)).headers.get('content-type');
+    for (const kind of ['avatar', 'banner']) {
+        const key = `${kind}Url`;
+        assert.equal((await send(kind, Buffer.from('nope'))).status, 400);
+        let r = await send(kind, GIF);
+        assert.equal(r.status, 200);
+        const first = r.body.user[key];
+        assert.ok(first, `${kind} URL is set`);
+        assert.equal(await type(first), 'image/gif');
+        r = await call('DELETE', `/users/me/${kind}`, {token: bob});
+        assert.equal(r.body.user[key], null, `${kind} removed`);
+        assert.equal((await fetch(`${base}${first}`)).status, 404);
+        r = await send(kind, PNG);
+        assert.notEqual(r.body.user[key], first, 're-upload gets a new URL');
+        assert.equal(await type(r.body.user[key]), 'image/png');
+    }
+    const r = await call('GET', '/users/bob');
+    assert.ok(r.body.user.bannerUrl && r.body.user.avatarUrl);
+});
+
 test('bans with reasons, IP bans and the activity log', async () => {
     const dave = await call('POST', '/auth/register', {ip: '198.51.100.7', json: {username: 'dave', password: 'password123'}});
     assert.equal(dave.status, 200);
