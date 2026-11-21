@@ -898,3 +898,12 @@ main.dm-main { max-width: 1200px; padding-bottom: 24px; }
 .dm-chat-who .muted.small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 @media (max-width: 520px) { .header-right > a.btn.small[href$="mystuff"] { display: none; } }
 @media (max-width: 520px) { .user-chip > .small { display: none; } }
+
+/* Live collaboration (project page) */
+.collab-card { margin-top: 14px; }
+.collab-people { display: flex; flex-direction: column; gap: 4px; }
+.collab-person { display: flex; align-items: center; gap: 10px; padding: 4px 0; }
+.collab-credit { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.collab-avatars { display: flex; gap: 10px; flex-wrap: wrap; }
+.collab-avatars a { display: inline-flex; align-items: center; gap: 6px; color: var(--text); font-weight: 800; font-size: .9rem; }
+.badge.live-badge { background: #0f2a17; color: #69db7c; }

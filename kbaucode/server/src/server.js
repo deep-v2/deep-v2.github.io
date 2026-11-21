@@ -10,6 +10,8 @@ import {encodeVars, handleCloudFrame, parseHandshake} from './core/cloud.js';
 import {openDatabase} from './node/db.js';
 import {createBlobStore} from './node/blobs.js';
 import {acceptUpgrade} from './node/websocket.js';
+import {CollabRoom} from './core/collab-room.js';
+import {authorizeCollab, snapshotKey} from './core/collab.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const env = process.env;
@@ -22,9 +24,20 @@ const SERVE_SITE = env.KBAU_SERVE_SITE !== '0';
 const TRUST_PROXY = env.KBAU_TRUST_PROXY === '1';
 
 const db = openDatabase(DATA_DIR, path.join(here, '..', 'migrations'));
+const blobs = createBlobStore(DATA_DIR);
+// Live collaboration rooms, one per project with people in it.
+const collabRooms = new Map();
 const api = createApi({
     db,
-    blobs: createBlobStore(DATA_DIR),
+    blobs,
+    collabStatus: async projectId => {
+        const room = collabRooms.get(String(projectId));
+        return room ? room.status() : {live: false, members: []};
+    },
+    collabKick: async (projectId, userId) => {
+        const room = collabRooms.get(String(projectId));
+        if (room) room.kick(userId);
+    },
     apiPrefix: API_PREFIX,
     admins: (env.KBAU_ADMINS || '').split(',').map(s => s.trim()).filter(Boolean),
     firstUserIsAdmin: env.KBAU_FIRST_USER_ADMIN !== '0'
@@ -114,6 +127,8 @@ const storeFor = projectId => ({
 });
 server.on('upgrade', (req, socket) => {
     const url = new URL(req.url, 'http://localhost');
+    const collab = new RegExp(`^${API_PREFIX}/collab/(\\d+)/?$`).exec(url.pathname);
+    if (collab) return collabUpgrade(req, socket, collab[1]);
     const m = new RegExp(`^${API_PREFIX}/cloud(?:/(\\d+))?/?$`).exec(url.pathname);
     if (!m) {
         socket.end('HTTP/1.1 404 Not Found\r\n\r\n');
@@ -151,6 +166,53 @@ server.on('upgrade', (req, socket) => {
         if (!room.size) rooms.delete(projectId);
     });
 });
+
+// ---------- live collaboration: WS <prefix>/collab/<projectId>, first message {t:'hello', token, key, resume} ----------
+function collabUpgrade (req, socket, projectId) {
+    const ws = acceptUpgrade(req, socket);
+    if (!ws) return;
+    let room = null;
+    let state = 'hello';
+    const conn = {
+        send: text => ws.send(text),
+        close: code => {
+            ws.close(code);
+            leave();
+        }
+    };
+    const leave = () => {
+        if (!room) return;
+        room.leave(conn);
+        if (!room.size && collabRooms.get(projectId) === room) collabRooms.delete(projectId);
+        room = null;
+    };
+    ws.on('message', async text => {
+        if (state === 'joined') return room && room.message(conn, text);
+        if (state !== 'hello') return;
+        state = 'authorizing';
+        let hello = null;
+        try {
+            hello = JSON.parse(text);
+        } catch (e) {
+            // fall through
+        }
+        const user = hello && hello.t === 'hello' ? await authorizeCollab(db, hello.token, projectId).catch(() => null) : null;
+        if (!user) {
+            ws.send(JSON.stringify({t: 'error', code: 'denied', message: "You can't edit this project live."}));
+            return ws.close(4001);
+        }
+        if (!collabRooms.has(projectId)) {
+            collabRooms.set(projectId, new CollabRoom({
+                projectId,
+                deleteSnapshot: async (session, rev) => blobs.delete(snapshotKey(projectId, session, rev))
+            }));
+        }
+        room = collabRooms.get(projectId);
+        state = 'joined';
+        room.join(conn, user, hello);
+    });
+    ws.on('close', leave);
+}
 
 server.listen(PORT, HOST, () => {
     console.log(`KbauBlocks server on http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`);

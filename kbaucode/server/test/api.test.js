@@ -643,3 +643,152 @@ test('direct messages, requests, pins, blocking and nicknames', async () => {
     assert.equal((await call('GET', '/users/me/privacy', {token: erin})).body.blocked.length, 0);
     assert.equal((await say(frank, 'dm_erin', 'hi again')).status, 201, 'an accepted chat keeps working after unblocking');
 });
+
+test('live collaboration: collaborators, assets, snapshots and the room', async () => {
+    const crypto = await import('node:crypto');
+    const reg = async (username, ip) => (await call('POST', '/auth/register', {ip, json: {username, password: 'password123'}})).body.token;
+    const owner = await reg('co_owner', '192.0.2.31');
+    const mate = await reg('co_mate', '192.0.2.32');
+    const outsider = await reg('co_out', '192.0.2.33');
+    const pid = (await call('POST', '/projects', {token: owner, form: projectForm('Team Game')})).body.project.id;
+
+    // Invites: owner only; invited people can open and save the (unshared) project.
+    assert.equal((await call('GET', `/projects/${pid}`, {token: mate})).status, 404);
+    assert.equal((await call('POST', `/projects/${pid}/collaborators`, {token: mate, json: {username: 'co_out'}})).status, 404);
+    let r = await call('POST', `/projects/${pid}/collaborators`, {token: owner, json: {username: 'co_mate'}});
+    assert.equal(r.status, 201);
+    assert.deepEqual(r.body.collaborators.map(u => u.username), ['co_mate']);
+    assert.equal((await call('POST', `/projects/${pid}/collaborators`, {token: owner, json: {username: 'co_owner'}})).status, 400);
+    r = await call('GET', `/projects/${pid}`, {token: mate});
+    assert.equal(r.body.project.canEdit, true);
+    assert.equal(r.body.project.collaborator, true);
+    assert.equal((await call('PUT', `/projects/${pid}/content`, {token: mate, form: projectForm('Team Game')})).status, 200);
+    assert.equal((await call('PUT', `/projects/${pid}/content`, {token: outsider, form: projectForm('Team Game')})).status, 404);
+    assert.deepEqual((await call('GET', '/users/me/collab-projects', {token: mate})).body.projects.map(p => p.id), [pid]);
+    r = await call('GET', `/projects/${pid}/collaborators`, {token: mate});
+    assert.equal(r.body.canEdit, true);
+    assert.equal(r.body.canManage, false);
+
+    // Shared asset store: named by MD5, checked on upload, cached forever.
+    const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="2" height="2"/>');
+    const name = `${crypto.createHash('md5').update(svg).digest('hex')}.svg`;
+    const putAsset = (asset, body, token = mate) => fetch(`${base}/collab/assets/${asset}?project=${pid}`, {
+        method: 'PUT', headers: {Authorization: `Bearer ${token}`}, body
+    });
+    assert.equal((await putAsset(`${'0'.repeat(32)}.svg`, svg)).status, 400, 'contents must match the name');
+    assert.equal((await putAsset(name, svg, outsider)).status, 404);
+    assert.equal((await putAsset(name, svg)).status, 201);
+    assert.equal((await putAsset(name, svg)).status, 200, 'second upload is a no-op');
+    r = await call('POST', '/collab/assets/missing', {token: mate, json: {project: pid, assets: [name, `${'a'.repeat(32)}.png`]}});
+    assert.deepEqual(r.body.missing, [`${'a'.repeat(32)}.png`]);
+    let res = await fetch(`${base}/collab/assets/${name}`);
+    assert.equal(await res.text(), svg.toString());
+    assert.match(res.headers.get('cache-control'), /immutable/);
+
+    // Live room over WebSocket.
+    const wsBase = `${base.replace(/^http/, 'ws')}/collab/${pid}`;
+    const connect = (token, extra = {}) => new Promise((resolve, reject) => {
+        const ws = new WebSocket(wsBase);
+        const inbox = [];
+        const waiters = [];
+        ws.addEventListener('message', e => {
+            const msg = JSON.parse(e.data);
+            const i = waiters.findIndex(w => w.type === msg.t);
+            if (i >= 0) waiters.splice(i, 1)[0].resolve(msg);
+            else inbox.push(msg);
+        });
+        ws.addEventListener('open', () => {
+            ws.send(JSON.stringify({t: 'hello', token, ...extra}));
+            resolve({
+                ws,
+                send: msg => ws.send(JSON.stringify(msg)),
+                next: (type, ms = 3000) => {
+                    const i = inbox.findIndex(m => m.t === type);
+                    if (i >= 0) return Promise.resolve(inbox.splice(i, 1)[0]);
+                    return new Promise((ok, fail) => {
+                        const w = {type, resolve: ok};
+                        waiters.push(w);
+                        setTimeout(() => fail(new Error(`timed out waiting for ${type}`)), ms);
+                    });
+                },
+                has: type => inbox.some(m => m.t === type),
+                closed: new Promise(ok => ws.addEventListener('close', e => ok(e.code)))
+            });
+        });
+        ws.addEventListener('error', reject);
+    });
+    const out = await connect(outsider);
+    assert.equal((await out.next('error')).code, 'denied');
+    assert.equal(await out.closed, 4001);
+
+    const a = await connect(owner, {key: 'A'});
+    const seed = await a.next('welcome');
+    assert.equal(seed.mode, 'seed', 'the first one in seeds the room');
+    const b = await connect(mate, {key: 'B'});
+    await b.next('wait');
+    // Seeding: upload the snapshot, then say so.
+    const snapUrl = rev => `${base}/projects/${pid}/collab/snapshot/${seed.session}/${rev}`;
+    res = await fetch(snapUrl(0), {method: 'PUT', headers: {Authorization: `Bearer ${owner}`, 'Content-Type': 'application/json'},
+        body: JSON.stringify({project: {targets: []}})});
+    assert.equal(res.status, 201);
+    a.send({t: 'seed'});
+    await a.next('seeded');
+    const wb = await b.next('welcome');
+    assert.equal(wb.mode, 'load');
+    assert.equal(wb.snapRev, 0);
+    assert.equal(wb.members[0].username, 'co_owner');
+    assert.equal((await a.next('join')).m.username, 'co_mate');
+    res = await fetch(snapUrl(0), {headers: {Authorization: `Bearer ${mate}`}});
+    assert.deepEqual(await res.json(), {project: {targets: []}});
+    r = await call('GET', `/projects/${pid}/collab`, {token: mate});
+    assert.equal(r.body.live, true);
+    assert.equal(r.body.members.length, 2);
+
+    // Ops are numbered, acked to the sender and relayed to everyone else.
+    a.send({t: 'op', c: '1', ops: [{k: 'b', e: {type: 'create'}}]});
+    assert.deepEqual(await a.next('ack'), {t: 'ack', c: '1', s: 1});
+    let ops = await b.next('ops');
+    assert.equal(ops.s, 1);
+    assert.equal(ops.u, seed.you.u);
+    b.send({t: 'op', c: '1', ops: [{k: 'x'}]});
+    assert.equal((await b.next('ack')).s, 2);
+    assert.equal((await a.next('ops')).s, 2);
+    // Resending the same batch (after a reconnect) doesn't apply it twice.
+    a.send({t: 'op', c: '1', ops: [{k: 'b', e: {type: 'create'}}]});
+    assert.equal((await a.next('ack')).s, 1);
+    // Presence is relayed, not numbered.
+    a.send({t: 'p', tg: 'Sprite1', x: 10, y: 20});
+    const p = await b.next('p');
+    assert.equal(p.tg, 'Sprite1');
+    assert.equal(p.u, seed.you.u);
+
+    // A dropped connection resumes from where it was.
+    b.ws.close();
+    await b.closed;
+    assert.equal((await a.next('leave')).u, wb.you.u);
+    a.send({t: 'op', c: '2', ops: [{k: 'y'}]});
+    await a.next('ack');
+    const b2 = await connect(mate, {key: 'B', resume: {session: seed.session, last: 2}});
+    const wb2 = await b2.next('welcome');
+    assert.equal(wb2.mode, 'resume');
+    ops = await b2.next('ops');
+    assert.equal(ops.s, 3);
+
+    // Checksums: when two editors disagree at the same point, both are told to resync.
+    a.send({t: 'sum', s: 3, h: 'aaa'});
+    b2.send({t: 'sum', s: 3, h: 'bbb'});
+    assert.equal((await a.next('resync')).at, 3);
+    assert.equal((await b2.next('resync')).at, 3);
+
+    // Removing a collaborator kicks them out of the room.
+    await call('DELETE', `/projects/${pid}/collaborators/co_mate`, {token: owner});
+    assert.equal((await b2.next('error')).code, 'removed');
+    assert.equal(await b2.closed, 4003);
+
+    // Last one out ends the session and deletes its snapshots.
+    a.ws.close();
+    await a.closed;
+    await new Promise(ok => setTimeout(ok, 100));
+    assert.equal((await call('GET', `/projects/${pid}/collab`, {token: owner})).body.live, false);
+    assert.equal((await fetch(snapUrl(0), {headers: {Authorization: `Bearer ${owner}`}})).status, 404);
+});

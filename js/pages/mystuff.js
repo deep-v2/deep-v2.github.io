@@ -18,17 +18,18 @@ const main = $('#main');
     const body = h('div', {class: 'card'});
     main.append(tabs, body);
     const show = async tab => {
-        tabs.replaceChildren(...[['projects', 'Projects'], ['collections', 'Collections']].map(([t, l]) =>
+        tabs.replaceChildren(...[['projects', 'Projects'], ['shared', 'Shared with me'], ['collections', 'Collections']].map(([t, l]) =>
             h('button', {class: t === tab ? 'active' : '', onclick: () => show(t)}, l)));
         body.replaceChildren(h('p', {class: 'empty'}, 'Loading…'));
         try {
             if (tab === 'projects') await renderProjects(body, user);
+            else if (tab === 'shared') await renderShared(body);
             else await renderCollections(body, user);
         } catch (e) {
             body.replaceChildren(errorNotice(e));
         }
     };
-    show('projects');
+    show(new URLSearchParams(location.search).get('tab') || 'projects');
 })();
 
 async function renderProjects (body, user) {
@@ -104,4 +105,33 @@ async function newCollection () {
     } catch (e) {
         toast(e.message);
     }
+}
+
+// Projects other people invited you to edit with them (live collaboration).
+async function renderShared (body) {
+    const {projects} = await api.get('/users/me/collab-projects');
+    if (!projects.length) {
+        body.replaceChildren(h('p', {class: 'empty'},
+            'Nothing here yet. When someone invites you to edit a project with them, it shows up here.'));
+        return;
+    }
+    body.replaceChildren(...projects.map(p => {
+        const thumb = h('div', {class: 'thumb'});
+        if (p.thumbnailUrl) {
+            const img = h('img', {alt: ''});
+            (p.shared ? apiUrl : imageUrl)(p.thumbnailUrl).then(u => {
+                img.src = u;
+            });
+            thumb.append(img);
+        }
+        const open = h('a', {class: 'btn small primary'}, 'Edit together');
+        editorUrl({kbau_project: p.id}).then(u => {
+            open.href = u;
+        });
+        return h('div', {class: 'list-row'}, thumb,
+            h('div', {class: 'grow'},
+                h('a', {href: link('project', {id: p.id}), style: 'font-weight:800;color:var(--text)'}, p.title),
+                h('div', {class: 'muted small'}, `by ${p.owner.displayName} · v${p.version} · updated ${timeAgo(p.updatedAt)}`)),
+            h('div', {class: 'row'}, open));
+    }));
 }

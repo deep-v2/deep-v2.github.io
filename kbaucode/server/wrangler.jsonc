@@ -17,10 +17,14 @@
     { "binding": "BUCKET", "bucket_name": "kbaublocks-files" }
   ],
   "durable_objects": {
-    "bindings": [{ "name": "CLOUD", "class_name": "CloudRoom" }]
+    "bindings": [
+      { "name": "CLOUD", "class_name": "CloudRoom" },
+      { "name": "COLLAB", "class_name": "CollabRoomDO" }
+    ]
   },
   "migrations": [
-    { "tag": "v1", "new_sqlite_classes": ["CloudRoom"] }
+    { "tag": "v1", "new_sqlite_classes": ["CloudRoom"] },
+    { "tag": "v2", "new_sqlite_classes": ["CollabRoomDO"] }
   ],
   "vars": {
     "KBAU_API_PREFIX": "/kbau-api",

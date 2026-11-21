@@ -93,7 +93,8 @@ const reportDialog = async (targetType, targetId) => {
                 project.shared ? `Shared ${timeAgo(project.sharedAt)}` : 'Not shared',
                 ` · Updated ${timeAgo(project.updatedAt)}`)));
     const statusBadges = h('div', {class: 'row', style: 'margin-bottom:6px'},
-        !project.shared ? h('span', {class: 'badge warn'}, 'Unshared — only you can see this') : null,
+        !project.shared ? h('span', {class: 'badge warn'}, project.collaborator ?
+            'Unshared — only the owner and collaborators can see this' : 'Unshared — only you can see this') : null,
         !project.shared && isOwner ? shareButton(project) : null,
         project.hidden ? h('span', {class: 'badge warn'}, 'Hidden by moderators') : null);
     left.append(statusBadges, h('div', {class: 'player'}, iframe));
@@ -126,12 +127,14 @@ const reportDialog = async (targetType, targetId) => {
 
     const actions = h('div', {class: 'actions'}, loveBtn, favBtn,
         h('span', {class: 'btn ghost', style: 'cursor:default'}, `👁 ${fmt(project.stats.views)}`));
-    const seeInside = h('a', {class: 'btn primary'}, isOwner ? 'Open in editor' : 'See inside');
-    editorUrl(isOwner ? {kbau_project: project.id} : {kbau_project: project.id, kbau_remix: project.id}).then(u => {
+    // Owners and invited collaborators open the project itself; everyone else opens a copy to remix.
+    const canEdit = !!project.canEdit;
+    const seeInside = h('a', {class: 'btn primary'}, canEdit ? 'Open in editor' : 'See inside');
+    editorUrl(canEdit ? {kbau_project: project.id} : {kbau_project: project.id, kbau_remix: project.id}).then(u => {
         seeInside.href = u;
     });
     actions.append(seeInside);
-    if (!isOwner) {
+    if (!canEdit) {
         const remix = h('a', {class: 'btn'}, '⑂ Remix');
         editorUrl({kbau_project: project.id, kbau_remix: project.id}).then(u => {
             remix.href = u;
@@ -144,6 +147,7 @@ const reportDialog = async (targetType, targetId) => {
         if (!isOwner) actions.append(h('button', {class: 'btn ghost small', onclick: () => reportDialog('project', project.id)}, 'Report'));
     }
     left.append(actions);
+    left.append(collabCard(project, user, isOwner));
 
     // ----- right column: info -----
     right.append(titleEl, ownerLine);
@@ -449,4 +453,86 @@ function renderComments (box, project, user, isOwner, isMod) {
     else if (!user) box.append(h('p', {class: 'muted'}, h('a', {href: `${link('login')}?next=${encodeURIComponent(location.pathname + location.search)}`}, 'Sign in'), ' to comment.'));
     box.append(list);
     load();
+}
+
+// ----- Live collaboration: who works on this project, invites (owner), "Edit together" -----
+function collabCard (project, user, isOwner) {
+    const card = h('div', {class: 'card collab-card', hidden: true});
+    const render = async () => {
+        let data;
+        try {
+            data = await api.get(`/projects/${project.id}/collaborators`);
+        } catch (e) {
+            return;
+        }
+        const team = data.collaborators;
+        // Visitors only see the credit line, and only when there's a team.
+        if (!data.canEdit) {
+            card.hidden = !team.length;
+            card.replaceChildren(h('div', {class: 'collab-credit'}, h('span', {class: 'muted small'}, 'Made together with'),
+                h('div', {class: 'collab-avatars'}, team.map(u => h('a', {href: link('user', {u: u.username}), title: u.displayName},
+                    avatarEl(u, 'sm'), h('span', {}, u.displayName))))));
+            return;
+        }
+        let live = {live: false, members: []};
+        try {
+            live = await api.get(`/projects/${project.id}/collab`);
+        } catch (e) {
+            // ignore
+        }
+        card.hidden = false;
+        const open = h('a', {class: 'btn primary'}, live.live ? 'Join live session' : 'Edit together');
+        editorUrl({kbau_project: project.id}).then(u => {
+            open.href = u;
+        });
+        const people = [{...data.owner, owner: true}, ...team];
+        const list = h('div', {class: 'collab-people'}, people.map(u => h('div', {class: 'collab-person'},
+            avatarEl(u, 'sm'),
+            h('div', {class: 'grow'}, h('a', {href: link('user', {u: u.username}), style: 'font-weight:800;color:var(--text)'}, u.displayName),
+                h('div', {class: 'muted small'}, u.owner ? 'owner' : `@${u.username}`)),
+            !u.owner && (isOwner || (user && user.username === u.username)) ? h('button', {class: 'btn ghost small', onclick: async () => {
+                const ok = await modal(isOwner ? `Remove ${u.displayName}?` : 'Leave this project?', [h('p', {class: 'muted'},
+                    isOwner ? 'They won\'t be able to open or edit this project anymore.' : 'You won\'t be able to edit it anymore.')],
+                [{label: 'Cancel', value: false, class: 'ghost'}, {label: isOwner ? 'Remove' : 'Leave', value: true, class: 'danger'}]);
+                if (!ok) return;
+                try {
+                    await api.del(`/projects/${project.id}/collaborators/${encodeURIComponent(u.username)}`);
+                    if (isOwner) render();
+                    else location.href = link('mystuff');
+                } catch (e) {
+                    toast(e.message);
+                }
+            }}, isOwner ? 'Remove' : 'Leave') : null)));
+        let invite = null;
+        if (isOwner) {
+            const input = h('input', {type: 'text', placeholder: 'Username', 'aria-label': 'Username to invite', maxlength: 20});
+            const send = async () => {
+                const name = input.value.trim().replace(/^@/, '');
+                if (!name) return;
+                try {
+                    await api.post(`/projects/${project.id}/collaborators`, {username: name});
+                    toast(`${name} can now edit this project with you`);
+                    render();
+                } catch (e) {
+                    toast(e.message);
+                }
+            };
+            input.addEventListener('keydown', e => {
+                if (e.key === 'Enter') send();
+            });
+            invite = h('div', {class: 'row', style: 'margin-top:10px'}, h('div', {style: 'flex:1;min-width:160px'}, input),
+                h('button', {class: 'btn', onclick: send}, 'Invite'));
+        }
+        card.replaceChildren(
+            h('div', {class: 'row', style: 'justify-content:space-between;margin-bottom:6px'},
+                h('h3', {style: 'margin:0'}, 'Edit together'),
+                live.live ? h('span', {class: 'badge live-badge'}, `● Live · ${live.members.length} editing`) : null),
+            h('p', {class: 'muted small', style: 'margin-top:0'},
+                'Everyone here can open this project and edit it at the same time: blocks, sprites, costumes and sounds update live for everyone. ',
+                'Click Collaborate in the editor\'s menu bar to start.'),
+            list, invite,
+            h('div', {class: 'row', style: 'margin-top:12px'}, open));
+    };
+    render();
+    return card;
 }

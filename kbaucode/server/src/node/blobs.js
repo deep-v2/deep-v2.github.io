@@ -23,6 +23,11 @@ export const createBlobStore = dataDir => {
             if (!fs.existsSync(p)) return null;
             const type = fs.existsSync(`${p}.type`) ? fs.readFileSync(`${p}.type`, 'utf8') : 'application/octet-stream';
             return {body: Readable.toWeb(fs.createReadStream(p)), size: fs.statSync(p).size, type};
+        },
+        delete: async key => {
+            const p = file(key);
+            fs.rmSync(p, {force: true});
+            fs.rmSync(`${p}.type`, {force: true});
         }
     };
 };

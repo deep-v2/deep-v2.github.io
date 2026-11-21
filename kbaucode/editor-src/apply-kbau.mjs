@@ -197,7 +197,8 @@ edit('src/components/menu-bar/menu-bar.jsx', [
         `import {APP_NAME} from '../../lib/brand.js';
 import kbauLogo from './kbau-logo.png';
 import {KbauError, getKbauProjectInfo, getToken, saveToKbau, shareToKbau, siteUrl} from '../../lib/kbau-cloud.js';
-import {KBAU_OFFLINE} from '../../lib/kbau-mode.js';`],
+import {KBAU_OFFLINE} from '../../lib/kbau-mode.js';
+import KbauCollab from '../kbau-collab/kbau-collab.jsx';`],
     ["            'handleClickSave',\n", "            'handleClickSave',\n            'handleClickKbauSave',\n            'handleClickKbauShare',\n"],
     // Know whether a project opened from KbauBlocks is already shared (Share button says "Shared").
     ["        document.addEventListener('keydown', this.handleKeyPress);\n    }\n", `        document.addEventListener('keydown', this.handleKeyPress);
@@ -333,6 +334,12 @@ import {KBAU_OFFLINE} from '../../lib/kbau-mode.js';`],
                             onClick={this.handleClickKbauShare}
                         />
                     </div>}
+                    {!KBAU_OFFLINE && <KbauCollab
+                        className={classNames(styles.menuBarItem)}
+                        vm={this.props.vm}
+                        projectTitle={this.props.projectTitle}
+                        projectChanged={!!this.props.kbauProjectChanged}
+                    />}
                     {this.props.canShare ? (\n`]
 ]);
 // Feedback / error-report links go to KbauBlocks, not to TurboWarp's maintainer.

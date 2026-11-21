@@ -8,6 +8,7 @@ import {
 } from './auth.js';
 import {BUILT_IN_WORD_COUNT, createFilter} from './filter.js';
 import {registerMessaging} from './messages.js';
+import {registerCollab} from './collab.js';
 
 export class HttpError extends Error {
     constructor (status, message, code) {
@@ -65,7 +66,11 @@ const PROJECT_SELECT = `SELECT p.*,
 // is the old mint; 0002 moved accounts still on that default to white.
 const DEFAULT_PROFILE_COLOR = '#ffffff';
 
-export const createApi = ({db, blobs, apiPrefix = '/kbau-api', admins = [], firstUserIsAdmin = true}) => {
+export const createApi = ({
+    db, blobs, apiPrefix = '/kbau-api', admins = [], firstUserIsAdmin = true,
+    // Live collaboration rooms live outside the API (Durable Object / Node process): ask them.
+    collabStatus = async () => ({live: false, members: []}), collabKick = async () => {}
+}) => {
     const adminSet = new Set(admins.map(a => a.toLowerCase()));
     let dummyHash = null;
 
@@ -128,7 +133,8 @@ export const createApi = ({db, blobs, apiPrefix = '/kbau-api', admins = [], firs
             viewer.id, p.id, viewer.id, p.id);
             out.loved = !!flags.loved;
             out.favorited = !!flags.favorited;
-            out.canEdit = viewer.id === p.owner_id;
+            out.collaborator = viewer.id !== p.owner_id && await isCollaborator(p.id, viewer.id);
+            out.canEdit = viewer.id === p.owner_id || out.collaborator;
         }
         return out;
     };
@@ -188,10 +194,14 @@ export const createApi = ({db, blobs, apiPrefix = '/kbau-api', admins = [], firs
         (p.shared && !p.hidden) || (user && (user.id === p.owner_id || isMod(user)))
     );
     const loadProject = id => db.get(`${PROJECT_SELECT} WHERE p.id = ?`, Number(id));
+    const isCollaborator = async (projectId, userId) =>
+        !!(await db.get('SELECT 1 AS x FROM project_collaborators WHERE project_id = ? AND user_id = ?', projectId, userId));
     const getProject = async (id, user) => {
         if (!/^\d+$/.test(String(id))) throw new HttpError(404, 'Project not found.');
         const p = await loadProject(id);
-        if (!canView(p, user)) throw new HttpError(404, 'Project not found.');
+        if (!canView(p, user) && !(p && !p.deleted && user && await isCollaborator(p.id, user.id))) {
+            throw new HttpError(404, 'Project not found.');
+        }
         return p;
     };
     const getOwnProject = async (id, user) => {
@@ -511,6 +521,13 @@ export const createApi = ({db, blobs, apiPrefix = '/kbau-api', admins = [], firs
         route, db, HttpError, now, requireUser, getUserByName, userOut, rateLimit, checkText, clampText, relationship
     });
 
+    // Live collaboration: collaborators, shared assets, session snapshots (collab.js)
+    const collab = registerCollab({
+        route, db, blobs, HttpError, now, requireUser, getUserByName, userOut, rateLimit, getProject, isCollaborator,
+        projectList: async (sql, ...params) => (await db.all(`${PROJECT_SELECT} ${sql}`, ...params)).map(projectOut),
+        blockState: messaging.blockState, collabStatus, collabKick
+    });
+
     // Projects
     route('POST', '/projects', async ctx => {
         const user = requireUser(ctx);
@@ -541,7 +558,7 @@ export const createApi = ({db, blobs, apiPrefix = '/kbau-api', admins = [], firs
     route('PUT', '/projects/:id/content', async ctx => {
         const user = requireUser(ctx);
         await rateLimit(`save:${user.id}`, 120, 3600_000);
-        const p = await getOwnProject(ctx.params.id, user);
+        const p = await collab.getEditable(ctx.params.id, user);
         const {form, file} = await readUploads(ctx);
         const sb3 = await file('project', MAX_SB3);
         if (!sb3 || !isZip(sb3)) throw new HttpError(400, 'Upload a valid .sb3 project.');
