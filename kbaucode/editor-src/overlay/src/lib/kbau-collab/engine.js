@@ -565,8 +565,12 @@ export class CollabEngine {
         }
     }
     pushSpriteAdd (t) {
-        const json = this.vm.toJSON(t.id);
-        const op = {k: 'spr+', name: t.getName(), json, ids: {c: t.getCostumes().map(idOf), s: t.getSounds().map(idOf)}};
+        // allowOptimization: false keeps block and variable ids (TurboWarp would otherwise shorten them).
+        const json = this.vm.toJSON(t.id, {allowOptimization: false});
+        const op = {
+            k: 'spr+', name: t.getName(), json, ids: {c: t.getCostumes().map(idOf), s: t.getSounds().map(idOf)},
+            inputs: this.inputIdMap(t)
+        };
         this.push(op, this.uploadItems([...t.getCostumes(), ...t.getSounds()]));
     }
 
@@ -886,6 +890,7 @@ export class CollabEngine {
         const added = this.vm.editingTarget;
         if (added && !added.isStage) {
             if (added.getName() !== op.name) this.vm.renameSprite(added.id, op.name);
+            this.applyInputIds(added, op.inputs);
             added.getCostumes().forEach((c, i) => op.ids.c[i] && assetIds.set(c, op.ids.c[i]));
             added.getSounds().forEach((s, i) => op.ids.s[i] && assetIds.set(s, op.ids.s[i]));
             touched.add(added);
@@ -986,7 +991,74 @@ export class CollabEngine {
 
     // ---------- snapshots ----------
     idsSnapshot () {
-        return this.originals().map(t => ({n: this.keyOf(t), c: t.getCostumes().map(idOf), s: t.getSounds().map(idOf)}));
+        return this.originals().map(t => ({
+            n: this.keyOf(t), c: t.getCostumes().map(idOf), s: t.getSounds().map(idOf), i: this.inputIdMap(t)
+        }));
+    }
+
+    /**
+     * sb3 stores simple inputs (numbers, text, colors, variable reporters in slots) without block ids, so loading
+     * gives them new random ids, different in every editor. Record which id sits in each input slot
+     * ("parentId<sep>INPUT" -> [block, shadow]) so others can rename theirs to match.
+     */
+    inputIdMap (t) {
+        const map = {};
+        const blocks = t.blocks._blocks;
+        for (const id in blocks) {
+            const inputs = blocks[id].inputs;
+            for (const name in inputs) {
+                const input = inputs[name];
+                if (input.block || input.shadow) map[`${id}\u0001${name}`] = [input.block, input.shadow];
+            }
+        }
+        return map;
+    }
+    applyInputIds (t, map) {
+        if (!map) return false;
+        const blocks = t.blocks._blocks;
+        let changed = false;
+        // Only primitives inside inputs get renamed, so only their parent, children and comments need updating.
+        const rename = (from, to) => {
+            if (!from || !to || from === to || !blocks[from] || blocks[to]) return;
+            const b = blocks[from];
+            delete blocks[from];
+            b.id = to;
+            blocks[to] = b;
+            const parent = b.parent && blocks[b.parent];
+            if (parent) {
+                for (const n in parent.inputs) {
+                    if (parent.inputs[n].block === from) parent.inputs[n].block = to;
+                    if (parent.inputs[n].shadow === from) parent.inputs[n].shadow = to;
+                }
+                if (parent.next === from) parent.next = to;
+            }
+            for (const n in b.inputs) {
+                for (const child of [blocks[b.inputs[n].block], blocks[b.inputs[n].shadow]]) {
+                    if (child && child.parent === from) child.parent = to;
+                }
+            }
+            if (b.next && blocks[b.next]) blocks[b.next].parent = to;
+            for (const cid in t.comments) if (t.comments[cid].blockId === from) t.comments[cid].blockId = to;
+            changed = true;
+        };
+        for (const id of Object.keys(blocks)) {
+            const block = blocks[id];
+            if (!block) continue;
+            for (const name in block.inputs) {
+                const want = map[`${id}\u0001${name}`];
+                if (!want) continue;
+                const input = block.inputs[name];
+                const shared = input.block && input.block === input.shadow;
+                if (shared) {
+                    rename(input.block, want[0] || want[1]);
+                } else {
+                    rename(input.block, want[0]);
+                    rename(input.shadow, want[1]);
+                }
+            }
+        }
+        if (changed) t.blocks.resetCache();
+        return changed;
     }
     async uploadAllAssets () {
         const items = [];
@@ -1010,7 +1082,7 @@ export class CollabEngine {
         });
     }
     async uploadSnapshot (rev, {seed = false} = {}) {
-        const projectJson = this.vm.toJSON();
+        const projectJson = this.vm.toJSON(undefined, {allowOptimization: false});
         const ids = this.idsSnapshot();
         if (seed) this.resetBaseline();
         await this.uploadAllAssets();
@@ -1053,20 +1125,18 @@ export class CollabEngine {
             this.progress = 'Opening the live project';
             this.emit();
             await this.vm.loadProject(buffer);
+            await settle();
             for (const entry of snap.ids || []) {
                 const t = this.targetByKey(entry.n);
                 if (!t) continue;
                 t.getCostumes().forEach((c, i) => entry.c[i] && assetIds.set(c, entry.c[i]));
                 t.getSounds().forEach((s, i) => entry.s[i] && assetIds.set(s, entry.s[i]));
+                this.applyInputIds(t, entry.i);
             }
+            const back = previous !== undefined ? this.targetByKey(previous) : null;
+            if (back && back !== this.vm.editingTarget) this.vm.setEditingTarget(back.id);
+            else this.vm.emitWorkspaceUpdate();
             await settle();
-            if (previous !== undefined) {
-                const t = this.targetByKey(previous);
-                if (t && t !== this.vm.editingTarget) {
-                    this.vm.setEditingTarget(t.id);
-                    await settle();
-                }
-            }
             this.resetBaseline();
         } finally {
             this.loadingProject = false;
